@@ -15,13 +15,13 @@ This document describes **target** product behavior (RFP + roadmap) and **what e
 | Area | In code today | Not in code / placeholder |
 |------|----------------|---------------------------|
 | **Monorepo** | npm workspaces: `@stellar/web`, `@stellar/api`, `@stellar/core` | Turborepo, extra split packages (`classic/`, `soroban/`, `adapters/`) |
-| **Health scan (UC-01)** | `GET /api/account/:id/health` → `buildHealthReport` in `@stellar/core` | Claimable balances not scanned; no separate “inspect only” product mode |
-| **Classic** | Horizon account, open-offer **count** (existence), checklist for trustlines, signers, thresholds, sponsorship, data entries, min reserve, SDEX row uses count or empty offer list from this endpoint | Full SDEX offer list + cancel txs on **health** path: health uses `hasOpenOffers` + count; **full offers** available via `GET .../offers` (not wired in default SPA) |
-| **LP / AMM** | LP share rows derived from Horizon balances in report | No LP withdraw / close txs |
+| **Health scan (UC-01)** | `GET /api/account/:id/health` → `buildHealthReport` in `@stellar/core`; inbound **claimable balances** count via Horizon `claimable_balances?claimant=` on the health path | No separate “inspect only” product mode |
+| **Classic** | Horizon account, checklist for trustlines, signers, thresholds, sponsorship, data entries, min reserve, claimables; SDEX offers: existence count on health path + **full list** via `GET .../offers` (wired for cancel in SPA); **trustline teardown:** sell vs XLM when book + liquidity (`GET .../order-book`), payout + `ChangeTrust`, empty-line removal | `LOW_RESERVE` / funding automation; path-based exit when no direct SDEX book |
+| **LP / AMM** | LP share rows in health + **withdraw-all** batch in Step 3 (`liquidityPoolWithdraw`, min 0) | DeFi protocol LP unwind |
 | **Soroban SAC** | `sorobanScan.ts`: SAC balances from Horizon-derived asset list; optional allowance simulation for `SOROBAN_ALLOWANCE_SPENDERS` | Arbitrary non-SAC Soroban assets; not a full allowance explorer |
 | **DeFi discovery** | **Blend:** `defiScan.ts` + `@blend-capital/blend-sdk` (backstop reward zone, per-pool user reads via RPC). **Aquarius / Soroswap:** static checklist rows (`unknown` / metadata only) — no on-chain adapter yet | DeFi unwind txs, non–reward-zone Blend, position-aggregator API |
-| **Web UI** | Vite + React: network, source address, destination field, checklist from health JSON, Demolish section disabled / copy-only | Stellar Wallets Kit is a **dependency** but **not integrated** in `App.tsx`; no tx signing, merge, or mediator |
-| **API shape** | Split reads: `GET .../horizon`, `GET .../offers`, `POST .../soroban-scan` (returns `soroban` + `defiProtocols`); monolithic health runs Horizon + Soroban + DeFi in parallel when account exists | `services/position-proxy` or handbook position API |
+| **Web UI** | Vite + React: network, wallet connect (Wallets Kit), source address, destination field, health checklist, **Step 3 — classic automated fixes** when a matching **blocking** code is present (sponsorship revoke, `ManageData` clears, offer cancel, LP withdraw, **empty trustline removal only**, signer/threshold cleanup, claim claimable balances) — each sign + submit via Horizon URL from health; **Trustlines card** (between Steps 2–3 when trustlines block): per-asset **crossing sell vs XLM** with slippage, **payout + `ChangeTrust`**, zero-only remove | Merge / mediator / Soroban teardown txs; sponsorship revoke still omits some **data** sponsorship cases (see README); trustline sell is **direct book vs XLM** only (no path router); **≤100** ops per classic batch helper |
+| **API shape** | Split reads: `GET .../horizon`, `GET .../offers`, `GET .../order-book`, `GET .../claimable-balances`, `POST .../soroban-scan` (returns `soroban` + `defiProtocols`); monolithic health runs Horizon + Soroban + DeFi + claimables in parallel when account exists | `services/position-proxy` or handbook position API |
 | **Server secrets** | API is read-only toward Horizon/RPC; no key ingestion | — |
 
 For a second opinion on “production gaps,” see the table in the root [README.md](../README.md) — **reconcile that table with this section** when updating README (README’s DeFi row may still say “not scanned” even though Blend RPC scan exists).
@@ -32,7 +32,7 @@ For a second opinion on “production gaps,” see the table in the root [README
 
 1. **Scan** a Stellar account (classic + Soroban surface) and produce a **structured report** of blockers and optional cleanup. *(**Partially done:** health report + checklist + `openPositions`.)*  
 2. **Plan** an ordered sequence of transactions (phases) with **human-readable preview** and **simulation** where possible. *(**Not done.**)*  
-3. **Execute** under user control: **client-side signing** only (default: wallets-kit; advanced: local secret with extreme warnings). *(**Not done** — kit not wired in UI.)*  
+3. **Execute** under user control: **client-side signing** only (default: wallets-kit; advanced: local secret with extreme warnings). *(**Partial:** Wallets Kit connected in UI; several **classic** cleanup flows sign + submit from Step 3; Soroban/DeFi writes not built.)*  
 4. **Exit** value to a destination: **merge** when possible; **mediator** path when destination cannot accept `ACCOUNT_MERGE`. *(**Not done.**)*  
 5. **Soroban parity** over time via **protocol adapters** (Blend, Aquarius, Soroswap, … per RFP). *(**Started:** Blend read-only adapter in API; others TBD.)*  
 6. **Inspect-only** path: allowances / authorizations / positions **without** teardown. *(**Partial:** allowances appear inside health when env configured; no standalone “inspect app” mode.)*
@@ -58,9 +58,9 @@ Non-goals for the **first vertical slice** remain: custodial signing, server-hel
 
 | ID | Use case | Mode | Primary outcome | In repo today |
 |----|-----------|------|-----------------|---------------|
-| UC-01 | **Account health scan** | Read-only | Report: balances, trustlines, offers, signers, thresholds, sponsorship, ~~claimables~~, data entries, Soroban SAC balances, DeFi checklist | **Yes**, minus claimables and minus “full position API”; Blend DeFi **read** on health path |
+| UC-01 | **Account health scan** | Read-only | Report: balances, trustlines, offers, signers, thresholds, sponsorship, claimable balance count, data entries, Soroban SAC balances, DeFi checklist | **Yes**, minus “full position API”; Blend DeFi **read** on health path |
 | UC-02 | **Inspect allowances / authorizations** | Read-only | List Soroban allowance-style state | **Partial** — subset of SAC allowances for configured spenders, embedded in health report; not a full authz explorer |
-| UC-03 | **Classic cleanup only** | Write | Cancel offers → … | **No** |
+| UC-03 | **Classic cleanup only** | Write | Cancel offers → … | **Partial** — subset of classic teardown in Step 3 (see §0); no router/sell, no merge |
 | UC-04 | **Exit to XLM (or chosen base)** | Write | Router / path payments | **No** |
 | UC-05 | **Full demolish + merge to G-address** | Write | Cleanup + merge | **No** |
 | UC-06 | **Demolish + CEX / no-merge destination** | Write | Mediator | **No** |
@@ -172,7 +172,7 @@ This subsection lists **where** DEX offers, LP/AMM stakes, and Soroban DeFi expo
 
 | Integration | Purpose | Status |
 |-------------|---------|--------|
-| **@creit.tech/stellar-wallets-kit** | Freighter, WalletConnect, etc. | Listed in `apps/web/package.json`; **not used in `App.tsx`** |
+| **@creit.tech/stellar-wallets-kit** | Freighter, WalletConnect, etc. | **Integrated in `App.tsx`** (connect / profile / disconnect); optional WalletConnect via `VITE_WALLETCONNECT_PROJECT_ID`; automated signed flows for blockers still **not** built |
 | **Local secret (advanced)** | Multisig or legacy flows | **Not implemented** |
 
 ### 4.5 Prior art code (optional fork)
@@ -210,6 +210,14 @@ Split endpoints return slices that can be merged client-side (see `apps/web/src/
 
 - **`TeardownPlan`:** ordered phases/steps, simulation hints — **not implemented**  
 - **`ExecutionSession`:** resume / tx hashes — **not implemented**
+
+### 5.4 Trustline removal policy (classic)
+
+1. **Per-asset choice when balance is positive:** Offer an optional **sell on the classic SDEX** using a **snapshot-derived** reference price from Horizon (direct **order book** for the asset vs a counter asset — today **XLM** only in the app — best bid) with explicit **slippage / min-out** style limits on the limit price. Enable the sell path only when the book shows **meaningful liquidity**; otherwise surface **“not listed / too thin”** and do not pretend a route exists. **Path / router-based** exits when there is no direct book remain **TODO** (not Soroban DeFi unwind).
+2. **Unsold remainder or user skips sell:** **`Payment`** of the **full remaining** credit balance to a **user-confirmed payout target**. Default suggestion in UI: the **asset issuer** from the trustline, with a **strong disclaimer** that issuers may not accept unsolicited returns and may use **auth / clawback** — the user must confirm before signing.
+3. **After balance is zero** and there are **no blocking offers** on that asset line: **`ChangeTrust` with limit `0`** removes the trustline. (The app may combine **payment + `ChangeTrust`** in one transaction when paying away the full balance.)
+4. **Sponsorship:** Resolve **sponsored reserve** relationships in the right order (e.g. **revoke sponsorship** where applicable, or ensure the sponsored account can authorize reserve-releasing ops) before expecting **`ChangeTrust`** to free subentries — mismatched ordering surfaces as Horizon errors.
+5. **Flags (auth / clawback):** **Precheck** issuer account flags when possible; otherwise rely on Horizon **submit** errors and clear copy.
 
 ---
 
@@ -274,7 +282,7 @@ Values below match **`services/api/README.md`**. The API reads them from the **p
 1. **Handbook-listed position API:** confirm URL + schema when M5 starts (may complement or replace part of RPC-only discovery).  
 2. **Mediator:** minimum XLM funding model, key generation (WebCrypto), CEX memo/tag templates per exchange.  
 3. **Fork vs greenfield** for classic teardown logic relative to stellar.expert/demolisher.  
-4. **README reconciliation:** align root README “Implemented / Not implemented” table with §0 and §2.2 so contributors are not misled (e.g. DeFi row, Wallets Kit row).
+4. **README / docs drift:** keep root README and this file aligned when adding features (e.g. DeFi read path, wallet connect).
 
 **Resolved (was ambiguous in earlier draft):**
 
@@ -307,3 +315,6 @@ Values below match **`services/api/README.md`**. The API reads them from the **p
 | 2026-05-14 | Initial use case & component spec for `work/stellar` repo |
 | 2026-05-14 | Aligned with implemented API/web/core: §0 status, UC table, actual repo layout, env names, HealthReport vs roadmap types, M1/M6 status, architecture doc link, open decisions |
 | 2026-05-14 | §4.2: expanded RFP/program APIs — Horizon SDEX + LP, Blend / Aquarius / Soroswap integration surfaces |
+| 2026-05-14 | §0 / §1 / §4.4: Wallets Kit connected in `App.tsx`; README gap table aligned |
+| 2026-05-15 | §0: classic sponsorship revoke (Horizon + Wallets Kit) in web; README production table |
+| 2026-05-15 | §5.4 **Trustline removal policy**; §5.3 restored; §0 table (trustline card, `order-book` route); README alignment |

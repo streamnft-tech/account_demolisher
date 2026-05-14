@@ -17,7 +17,7 @@ GET /api/account/G.../health?network=mainnet
 
 If **`HORIZON_URL`** is set in the environment, it **overrides** both: every request uses that base URL, and responses mark `ledgerNetwork: "custom"`.
 
-Soroban scans use **public RPC** per `?network=` unless **`SOROBAN_RPC_URL`** is set (then that URL is used for both networks, same pattern as Horizon).
+Soroban scans use **public RPC** per `?network=` unless **`SOROBAN_RPC_URL`** is set (then that URL is used for both networks, same pattern as Horizon). **Mainnet default** is Gateway’s public endpoint (`soroban-rpc.mainnet.stellar.gateway.fm`); the older `soroban-rpc.mainnet.stellar.org` host does not resolve in DNS. Override with `SOROBAN_RPC_URL` if you use another provider.
 
 ## Environment
 
@@ -35,3 +35,7 @@ Soroban scans use **public RPC** per `?network=` unless **`SOROBAN_RPC_URL`** is
 
 - `GET /health` — liveness + which Horizon / Soroban RPC URLs are in effect  
 - `GET /api/account/:accountId/health?network=testnet|mainnet` — classic + Soroban health / merge blockers (see `checklist` in JSON)  
+- `GET /api/order-book?network=…&asset_code=…&asset_issuer=G…` — Horizon SDEX **order book** for selling the credit asset vs **native** (used by the web trustline card; avoids browser CORS to Horizon)
+- `GET /api/account/:accountId/horizon?network=` — raw Horizon account JSON (debug / advanced clients)  
+- `GET /api/account/:accountId/offers?network=` — full SDEX offer rows for the account (used by web cancel flow)  
+- `GET /api/account/:accountId/claimable-balances?network=` — inbound claimable balance IDs (`claimant` = account)  

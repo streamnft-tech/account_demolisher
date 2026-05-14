@@ -17,9 +17,10 @@ import { Api, Server } from "@stellar/stellar-sdk/rpc";
 import type { LedgerQueryNetwork } from "./horizon.js";
 import { isUpstreamBodyLogEnabled, logUpstream } from "./upstreamLog.js";
 
+/** Defaults match [Stellar RPC public providers](https://developers.stellar.org/docs/data/apis/rpc/providers). SDF `soroban-testnet.stellar.org` works for testnet; there is no working public `*.stellar.org` mainnet Soroban host in DNS — use Gateway.fm unless `SOROBAN_RPC_URL` overrides. */
 const DEFAULT_SOROBAN_RPC: Record<LedgerQueryNetwork, string> = {
   testnet: "https://soroban-testnet.stellar.org",
-  mainnet: "https://soroban-rpc.mainnet.stellar.org",
+  mainnet: "https://soroban-rpc.mainnet.stellar.gateway.fm",
 };
 
 export function resolveSorobanRpcUrl(network: LedgerQueryNetwork): string {

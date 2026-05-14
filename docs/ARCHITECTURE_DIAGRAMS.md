@@ -19,6 +19,7 @@ flowchart TB
   subgraph DevHost["Developer machine"]
     subgraph Web["@stellar/web — Vite SPA :5173"]
       UI[App.tsx — checklist, destination, Demolish placeholder]
+      WK[Stellar Wallets Kit — connect / profile / sign hook]
       CoreC["@stellar/core — types, isValidClassicAddress"]
     end
     subgraph API["@stellar/api — Fastify :8787"]
@@ -44,12 +45,12 @@ flowchart TB
   end
 
   subgraph Planned["Documented / README — not fully wired"]
-    WK[Stellar Wallets Kit — dep present, UI not integrated]
-    PL[Planner / preview / tx execution]
+    PL[Planner / preview / automated tx execution]
     POS["Handbook position API — not in repo"]
   end
 
   U --> UI
+  UI --> WK
   UI --> CoreC
   UI -->|HTTP GET `/api/.../health`| PROXY
   PROXY --> IDX
@@ -62,7 +63,6 @@ flowchart TB
   IDX --> DF --> BC
   IDX --> CORE
 
-  UI -.->|future| WK
   UI -.->|future| PL
   IDX -.->|RFP / docs| POS
 ```
@@ -70,13 +70,13 @@ flowchart TB
 ### Legend
 
 - **Solid arrows:** implemented request/data flow for the current vertical slice.
-- **Dashed arrows:** described in docs or README as future work (wallet, planner, external position API).
+- **Dashed arrows:** described in docs or README as future work (planner, external position API, automated signed teardown).
 
 ---
 
 ## 2. Sequence diagram — user journey (current SPA)
 
-Default flow: network + source G-address (+ optional destination) → **read-only** `GET .../health` → checklist. Demolish / merge / wallet signing remain placeholders per README.
+Default flow: network + optional wallet connect + source G-address (+ optional destination) → **read-only** `GET .../health` → checklist. Demolish / merge / per-blocker signed fixes remain future work.
 
 ```mermaid
 sequenceDiagram
@@ -121,7 +121,7 @@ sequenceDiagram
   end
 
   User->>Browser: Optionally enter destination, read "Demolish" copy
-  Note over User,Browser: README: no ACCOUNT_MERGE, no wallet-signed teardown in UI yet
+  Note over User,Browser: README: no ACCOUNT_MERGE; wallet can connect for future signed steps — no automated teardown txs yet
 ```
 
 ### Other API routes (not shown in the sequence above)

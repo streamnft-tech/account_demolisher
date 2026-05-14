@@ -23,6 +23,7 @@ export type BlockerCode =
   | "SOROBAN_RPC"
   | "SOROBAN_TOKEN_BALANCE"
   | "SOROBAN_ALLOWANCE"
+  | "CLAIMABLE_BALANCES_PENDING"
   | "DEFI_POSITIONS_UNKNOWN"
   | "DEFI_POSITIONS_OPEN";
 
@@ -106,6 +107,8 @@ export interface BuildHealthReportInput {
   horizonAccount: HorizonAccountShape | null;
   offersCount: number;
   soroban: SorobanScanResult | null;
+  /** Inbound claimable balances where this account is a claimant (Horizon); optional for health reports built without this scan. */
+  inboundClaimableBalanceCount?: number;
   /** Full classic offer list + defi protocol surface; LP shares may be omitted and derived from Horizon balances. */
   openPositions?: OpenPositionsSnapshot | null;
 }
@@ -287,6 +290,20 @@ export function buildHealthReport(input: BuildHealthReportInput): HealthReport {
     blocksDemolish: true,
   });
 
+  const claimScanKnown = input.inboundClaimableBalanceCount !== undefined;
+  const claimN = input.inboundClaimableBalanceCount ?? 0;
+  push({
+    id: "classic_claimable_balances",
+    label: "No inbound claimable balances to claim",
+    status: !claimScanKnown ? "unknown" : claimN > 0 ? "fail" : "pass",
+    detail: !claimScanKnown
+      ? "Horizon claimable_balances scan missing or failed."
+      : claimN > 0
+        ? `${claimN} balance(s) where this account is a claimant`
+        : undefined,
+    blocksDemolish: true,
+  });
+
   const native = balances.find((b) => b.asset_type === "native");
   const nativeBalance = parseNum(native?.balance);
   const subentries = account.subentry_count ?? 0;
@@ -438,6 +455,7 @@ function fillRemainingUnknown(list: HealthChecklistItem[]) {
     { id: "classic_trustlines", label: "No classic trustlines / non-native balances" },
     { id: "classic_open_offers", label: "No open classic (SDEX) offers" },
     { id: "classic_amm_lp_shares", label: "No classic AMM / liquidity pool shares" },
+    { id: "classic_claimable_balances", label: "No inbound claimable balances to claim" },
     { id: "classic_data_entries", label: "No account data entries" },
     { id: "classic_min_reserve", label: "Native balance meets minimum reserve" },
     { id: "native_merge_payout", label: "Native XLM payout on merge (FYI)" },
@@ -476,6 +494,7 @@ function checklistToBlockers(checklist: HealthChecklistItem[], nativeBalance: nu
   addFrom("classic_trustlines", "TRUSTLINES_OR_ASSET_BALANCES", 30, "Trustlines or non-native balances", (d) => d ?? "Remove trustlines.");
   addFrom("classic_open_offers", "OPEN_OFFERS", 35, "Open DEX offers", (d) => d ?? "Cancel offers.");
   addFrom("classic_amm_lp_shares", "OPEN_LIQUIDITY_POOL", 36, "Classic AMM / liquidity pool shares", (d) => d ?? "Withdraw pool liquidity.");
+  addFrom("classic_claimable_balances", "CLAIMABLE_BALANCES_PENDING", 38, "Inbound claimable balances", (d) => d ?? "Claim balances you are entitled to.");
   addFrom("classic_data_entries", "DATA_ENTRIES", 40, "Data entries present", (d) => d ?? "Remove data entries.");
   addFrom("classic_min_reserve", "LOW_RESERVE", 5, "Below minimum reserve", (d) => d ?? "Fund or reduce subentries.");
 

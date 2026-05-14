@@ -10,6 +10,8 @@ import {
   type LedgerQueryNetwork,
 } from "./horizon.js";
 import { fetchSdexOffersForSeller } from "./fetchClassicPositions.js";
+import { fetchClaimableBalanceIdsForClaimant } from "./fetchClaimableBalances.js";
+import { fetchOrderBookSellingCreditForNative } from "./fetchOrderBook.js";
 import { scanDefiProtocols } from "./defiScan.js";
 import { resolveSorobanRpcUrl, scanSorobanForAccount } from "./sorobanScan.js";
 
@@ -51,7 +53,7 @@ app.get("/health", async () => {
       ? { testnet: resolveSorobanRpcUrl("testnet"), mainnet: resolveSorobanRpcUrl("mainnet"), note: "SOROBAN_RPC_URL overrides both" }
       : {
           testnet: "https://soroban-testnet.stellar.org",
-          mainnet: "https://soroban-rpc.mainnet.stellar.org",
+          mainnet: "https://soroban-rpc.mainnet.stellar.gateway.fm",
         },
   };
 });
@@ -152,6 +154,71 @@ app.get("/api/account/:accountId/offers", async (request, reply) => {
   }
 });
 
+app.get("/api/account/:accountId/claimable-balances", async (request, reply) => {
+  const { accountId } = request.params as { accountId: string };
+  const id = decodeAccountIdParam(accountId);
+  const network: LedgerQueryNetwork = parseNetworkQuery((request.query as { network?: string }).network);
+  const horizonUrl = resolveHorizonBase(network);
+
+  if (!isValidClassicAddress(id)) {
+    return reply.status(400).send({ error: "INVALID_ADDRESS", message: "Not a valid classic G-address." });
+  }
+
+  try {
+    const ids = await fetchClaimableBalanceIdsForClaimant(horizonUrl, id, request.log);
+    return reply.send({
+      claimableBalances: ids.map((balanceId) => ({ id: balanceId })),
+    });
+  } catch (e) {
+    request.log.error(e);
+    return reply.status(502).send({
+      error: "HORIZON_UPSTREAM",
+      message: e instanceof Error ? e.message : "Unknown error",
+    });
+  }
+});
+
+app.get("/api/order-book", async (request, reply) => {
+  const q = request.query as {
+    network?: string;
+    asset_code?: string;
+    asset_issuer?: string;
+  };
+  const network: LedgerQueryNetwork = parseNetworkQuery(q.network);
+  const code = typeof q.asset_code === "string" ? q.asset_code.trim() : "";
+  const issuer = typeof q.asset_issuer === "string" ? q.asset_issuer.trim() : "";
+
+  if (!code || code.length > 12 || !/^[a-zA-Z0-9]+$/.test(code)) {
+    return reply.status(400).send({ error: "INVALID_ASSET_CODE", message: "asset_code must be 1–12 alphanumeric characters." });
+  }
+  if (!isValidClassicAddress(issuer)) {
+    return reply.status(400).send({ error: "INVALID_ISSUER", message: "asset_issuer must be a valid classic G-address." });
+  }
+
+  try {
+    const book = await fetchOrderBookSellingCreditForNative({
+      network,
+      assetCode: code,
+      assetIssuer: issuer,
+      log: request.log,
+    });
+    return reply.send({
+      ledgerNetwork: ledgerNetworkLabel(network),
+      horizonUrl: resolveHorizonBase(network),
+      selling: { type: "credit", code, issuer },
+      buying: { type: "native" },
+      bids: book.bids,
+      asks: book.asks,
+    });
+  } catch (e) {
+    request.log.error(e);
+    return reply.status(502).send({
+      error: "HORIZON_UPSTREAM",
+      message: e instanceof Error ? e.message : "Unknown error",
+    });
+  }
+});
+
 app.get("/api/account/:accountId/health", async (request, reply) => {
   const { accountId } = request.params as { accountId: string };
   const id = decodeAccountIdParam(accountId);
@@ -205,10 +272,18 @@ app.get("/api/account/:accountId/health", async (request, reply) => {
       return reply.send(report);
     }
 
-    const [soroban, defiProtocols] = await Promise.all([
+    const [soroban, defiProtocols, claimableIdsResult] = await Promise.all([
       scanSorobanForAccount({ accountId: id, horizonAccount: account, network, log: request.log }),
       scanDefiProtocols({ accountId: id, network, sorobanRpcUrl }),
+      fetchClaimableBalanceIdsForClaimant(horizonUrl, id, request.log)
+        .then((ids): { ok: true; ids: string[] } => ({ ok: true, ids }))
+        .catch((err: unknown): { ok: false } => {
+          request.log.warn({ err }, "claimable_balances scan failed");
+          return { ok: false };
+        }),
     ]);
+    const inboundClaimableBalanceCount = claimableIdsResult.ok ? claimableIdsResult.ids.length : undefined;
+
     const report = buildHealthReport({
       accountId: id,
       ledgerNetwork,
@@ -217,6 +292,7 @@ app.get("/api/account/:accountId/health", async (request, reply) => {
       horizonAccount: account,
       offersCount,
       soroban,
+      inboundClaimableBalanceCount,
       openPositions: {
         sdexOffers: [],
         liquidityPoolShares: [],

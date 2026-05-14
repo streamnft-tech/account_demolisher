@@ -45,3 +45,12 @@ export async function ensureWalletKit(uiNetwork: UiNetwork): Promise<void> {
   });
   initialized = true;
 }
+
+/** Human-readable message for kit / modal errors (`{ code, message }` or `Error`). */
+export function formatWalletError(e: unknown): string {
+  if (e && typeof e === "object" && "message" in e && typeof (e as { message: unknown }).message === "string") {
+    return (e as { message: string }).message;
+  }
+  if (e instanceof Error) return e.message;
+  return "Wallet action failed.";
+}

@@ -5,11 +5,21 @@ import type { UiNetwork } from "./network.js";
 
 const MAX_OPS = 100;
 
+/** Result of building a classic cleanup transaction batch (sign + submit). */
+export type ClassicBatchResult = {
+  xdr: string;
+  opCount: number;
+  truncated: boolean;
+  totalDiscovered: number;
+  /** Shown after success when user may need another pass */
+  followUpHint?: string;
+};
+
 export function sdkPassphrase(network: UiNetwork): string {
   return network === "mainnet" ? Networks.PUBLIC : Networks.TESTNET;
 }
 
-function horizonServer(horizonUrl: string): Horizon.Server {
+export function horizonServer(horizonUrl: string): Horizon.Server {
   return new Horizon.Server(horizonUrl, { allowHttp: horizonUrl.startsWith("http:") });
 }
 
