@@ -62,9 +62,25 @@ export function TrustlineTeardownCard(props: {
   const [confirmPayoutByKey, setConfirmPayoutByKey] = useState<Record<string, boolean>>({});
   const [slippageBpsByKey, setSlippageBpsByKey] = useState<Record<string, number>>({});
   const [issuerHintsByKey, setIssuerHintsByKey] = useState<Record<string, string[]>>({});
+  const [soroswapConfigured, setSoroswapConfigured] = useState<boolean | null>(null);
 
   const ready =
     Boolean(walletAddress) && !walletMismatch && walletAddress === accountId && Boolean(horizonUrl);
+
+  useEffect(() => {
+    let cancelled = false;
+    void fetch("/api/soroswap/status")
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
+      .then((j: { configured?: boolean }) => {
+        if (!cancelled) setSoroswapConfigured(Boolean(j.configured));
+      })
+      .catch(() => {
+        if (!cancelled) setSoroswapConfigured(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const reload = useCallback(async () => {
     setLoadErr(null);
@@ -228,6 +244,53 @@ export function TrustlineTeardownCard(props: {
     }
   };
 
+  const onSoroswapSell = async (r: CreditTrustlineRow) => {
+    if (!ready) return;
+    const k = rowKey(r);
+    const slip = slippageBpsByKey[k] ?? 100;
+    setWalletBusy(true);
+    setWalletError(null);
+    setActionSuccess(null);
+    try {
+      const q = new URLSearchParams({ network });
+      const res = await fetch(`/api/soroswap/swap-xdr?${q}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          sourceAccount: accountId,
+          assetCode: r.assetCode,
+          assetIssuer: r.assetIssuer,
+          sellAmount: r.balance,
+          slippageBps: slip,
+        }),
+        signal: AbortSignal.timeout(120_000),
+      });
+      const text = await res.text();
+      if (!res.ok) {
+        let msg = text.slice(0, 400);
+        try {
+          const j = JSON.parse(text) as { message?: string };
+          if (j.message) msg = j.message;
+        } catch {
+          /* ignore */
+        }
+        throw new Error(msg);
+      }
+      const body = JSON.parse(text) as { xdr?: string };
+      if (!body.xdr) throw new Error("API returned no XDR.");
+      const { hash } = await signSubmit(body.xdr);
+      setActionSuccess(
+        `Soroswap route submitted. Tx ${hash.slice(0, 10)}… If the wallet showed a Soroban transaction, confirm fees and footprints. Re-run health when Horizon catches up.`,
+      );
+      await onSubmitted();
+      await reload();
+    } catch (e) {
+      setWalletError(formatWalletError(e));
+    } finally {
+      setWalletBusy(false);
+    }
+  };
+
   const onPayIssuerAndRemove = async (r: CreditTrustlineRow) => {
     if (!ready) return;
     const k = rowKey(r);
@@ -310,10 +373,12 @@ export function TrustlineTeardownCard(props: {
       <h2 className="cardTitle">Trustlines &amp; non-native balances</h2>
       <p className="hint">
         Per-asset cleanup: optional crossing sell vs XLM when the SDEX book exists (slippage applies to the limit price),
-        or pay the full Horizon balance to a <strong>user-confirmed</strong> destination (default: issuer) then{" "}
-        <code className="inlineCode">ChangeTrust</code> limit 0. Issuers may reject or claw back unsolicited returns — you
-        must confirm. Cancel any open offers on the asset first (offers block trustline removal). Sponsorship and
-        issuer auth/clawback flags can still make operations fail — read Horizon errors carefully.
+        optional <strong>Soroswap</strong> aggregated route (classic → native) when the API is configured with{" "}
+        <code className="inlineCode">SOROSWAP_BEARER_TOKEN</code>, or pay the full Horizon balance to a{" "}
+        <strong>user-confirmed</strong> destination (default: issuer) then <code className="inlineCode">ChangeTrust</code>{" "}
+        limit 0. Issuers may reject or claw back unsolicited returns — you must confirm. Cancel any open offers on the
+        asset first (offers block trustline removal). Sponsorship and issuer auth/clawback flags can still make operations
+        fail — read Horizon errors carefully.
       </p>
       {!ready ? (
         <p className="error">
@@ -333,6 +398,7 @@ export function TrustlineTeardownCard(props: {
           const slip = slippageBpsByKey[k] ?? 100;
           const canSell =
             book.status === "ok" && !book.thin && book.bestPrice !== null && ready && !walletBusy;
+          const canSoroswapSell = soroswapConfigured === true && ready && !walletBusy;
           const sellLabel =
             book.status === "loading"
               ? "Checking SDEX…"
@@ -380,6 +446,19 @@ export function TrustlineTeardownCard(props: {
                 </label>
                 <button type="button" className="btn secondary" disabled={!canSell} title={sellLabel} onClick={() => void onSell(r)}>
                   {sellLabel}
+                </button>
+                <button
+                  type="button"
+                  className="btn secondary"
+                  disabled={!canSoroswapSell}
+                  title={
+                    soroswapConfigured === false
+                      ? "API needs SOROSWAP_BEARER_TOKEN — or use SDEX / payout flows"
+                      : "Best-route swap to native via Soroswap (sign in wallet)"
+                  }
+                  onClick={() => void onSoroswapSell(r)}
+                >
+                  {soroswapConfigured === null ? "Soroswap…" : soroswapConfigured ? "Sell via Soroswap (route)" : "Soroswap (not configured)"}
                 </button>
               </div>
               <div className="payoutBlock">

@@ -347,3 +347,48 @@ export async function buildMergeFriendlySignersAndThresholdsBatchXdr(params: {
     totalDiscovered: 1,
   };
 }
+
+async function assertDestinationAccountExists(horizonUrl: string, destination: string): Promise<void> {
+  const base = horizonUrl.replace(/\/?$/, "");
+  const res = await fetch(`${base}/accounts/${encodeURIComponent(destination)}`);
+  if (res.status === 404) {
+    throw new Error("Merge destination does not exist on this network. Create or fund that account first.");
+  }
+  if (!res.ok) {
+    const t = await res.text();
+    throw new Error(`Could not verify merge destination: HTTP ${res.status} ${t.slice(0, 200)}`);
+  }
+}
+
+/** Single `accountMerge` — native XLM (minus fee) credits the destination; account is removed if successful. */
+export async function buildAccountMergeBatchXdr(params: {
+  horizonUrl: string;
+  sourceAccount: string;
+  destinationAccount: string;
+  network: UiNetwork;
+}): Promise<ClassicBatchResult> {
+  const src = params.sourceAccount.trim();
+  const dest = params.destinationAccount.trim();
+  if (!src || !dest) throw new Error("Source and destination are required.");
+  if (src === dest) throw new Error("Destination must be a different account than the source.");
+  await assertDestinationAccountExists(params.horizonUrl, dest);
+  const server = horizonServer(params.horizonUrl);
+  const account = await server.loadAccount(src);
+  const tx = new TransactionBuilder(account, {
+    fee: BASE_FEE,
+    networkPassphrase: sdkPassphrase(params.network),
+  })
+    .addOperation(
+      Operation.accountMerge({
+        destination: dest,
+      }),
+    )
+    .setTimeout(180)
+    .build();
+  return {
+    xdr: tx.toXDR(),
+    opCount: 1,
+    truncated: false,
+    totalDiscovered: 1,
+  };
+}

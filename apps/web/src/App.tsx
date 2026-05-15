@@ -12,6 +12,7 @@ import {
 import { runClassicBlockerFix } from "./classicBlockerHandlers.js";
 import type { ClassicBatchResult } from "./classicClose.js";
 import { sdkPassphrase, submitSignedClassicTx } from "./classicClose.js";
+import { buildAccountMergeBatchXdr } from "./classicDemolish.js";
 import { TrustlineTeardownCard } from "./TrustlineTeardownCard.js";
 import "./App.css";
 
@@ -999,6 +1000,7 @@ function AppShell() {
   const [watchlistNetwork, setWatchlistNetwork] = useState<UiNetwork>("testnet");
   const [closeConfirm, setCloseConfirm] = useState("");
   const [didAutoloadQueryAccount, setDidAutoloadQueryAccount] = useState(false);
+  const [mergeBusy, setMergeBusy] = useState(false);
 
   useEffect(() => {
     void ensureWalletKit(network);
@@ -1176,6 +1178,40 @@ function AppShell() {
     },
     [health, network, source, walletAddress, refreshHealth, signSubmitClassicBatch],
   );
+
+  const runAccountMerge = useCallback(async () => {
+    const id = source.trim();
+    const dest = destination.trim();
+    if (!health?.horizonUrl || !walletAddress || !isValidClassicAddress(id) || !isValidClassicAddress(dest)) return;
+    if (!health.canDemolish) {
+      setWalletError("Health scan must report merge-ready state before submitting ACCOUNT_MERGE.");
+      return;
+    }
+    if (id === dest) {
+      setWalletError("Destination must differ from the source account.");
+      return;
+    }
+    setMergeBusy(true);
+    setWalletError(null);
+    setActionSuccess(null);
+    try {
+      const batch = await buildAccountMergeBatchXdr({
+        horizonUrl: health.horizonUrl,
+        sourceAccount: id,
+        destinationAccount: dest,
+        network,
+      });
+      const { hash } = await signSubmitClassicBatch(batch);
+      setActionSuccess(
+        `Account merge submitted. Tx ${hash.slice(0, 10)}… Native XLM (minus fee) credits the destination; this account should disappear once Horizon confirms.`,
+      );
+      await refreshHealth();
+    } catch (e) {
+      setWalletError(formatWalletError(e));
+    } finally {
+      setMergeBusy(false);
+    }
+  }, [health, network, source, destination, walletAddress, refreshHealth, signSubmitClassicBatch]);
 
   const destOk = isValidClassicAddress(destination.trim());
   const blocking = health?.blockers.filter((b: Blocker) => b.kind === "blocking") ?? [];
@@ -1896,16 +1932,14 @@ function AppShell() {
                         <button
                           type="button"
                           className="btn danger"
-                          disabled={!destOk || closeConfirm !== "CLOSE" || !walletAddress}
-                          title="Final close execution is not yet wired in the current frontend."
+                          disabled={!destOk || closeConfirm !== "CLOSE" || !walletAddress || walletBusy || mergeBusy || Boolean(walletMismatch) || !health.horizonUrl}
+                          title="Sign final close in your wallet. This action is irreversible once confirmed on-chain."
+                          onClick={() => void runAccountMerge()}
                         >
-                          Close Account
+                          {mergeBusy ? "Closing account…" : "Close Account"}
                         </button>
                       </div>
-                      <p className="meta">
-                        Current frontend exposes close readiness from the existing backend outputs. Final close execution
-                        is not yet wired in this branch.
-                      </p>
+                      {walletError ? <p className="error">{walletError}</p> : null}
                     </section>
                   </>
                 )}

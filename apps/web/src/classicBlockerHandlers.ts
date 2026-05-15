@@ -160,6 +160,10 @@ export function classicBlockerButtonTitle(
       return "Removes zero-balance lines only. Use the Trustlines section (above Step 3) to sell, payout, or clear balances first.";
     case "OPEN_LIQUIDITY_POOL":
       return "Withdraws all LP shares with min amounts 0 (high slippage risk — confirm in wallet)";
+    case "MULTISIG_OR_EXTRA_SIGNERS":
+      return "Phase 1: removes up to 100 extra ed25519 signers per tx (re-run until clear). Phase 2: same button then sets merge-friendly thresholds.";
+    case "NON_DEFAULT_THRESHOLDS":
+      return "Sets master weight 1 and low/med/high thresholds to merge-friendly values (run after extra signers are gone).";
     default:
       return "Build transaction, sign in wallet, submit to Horizon";
   }

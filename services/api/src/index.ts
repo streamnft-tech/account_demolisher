@@ -1,10 +1,9 @@
 import Fastify from "fastify";
 import cors from "@fastify/cors";
-import { buildHealthReport, isValidClassicAddress, type HorizonAccountShape } from "@stellar/core";
+import { buildHealthReport, extractLiquidityPoolSharesFromHorizonBalances, isValidClassicAddress, type HorizonAccountShape } from "@stellar/core";
 import {
   fetchAccountFromHorizon,
   getHorizonOverride,
-  hasOpenOffers,
   parseNetworkQuery,
   resolveHorizonBase,
   type LedgerQueryNetwork,
@@ -14,6 +13,7 @@ import { fetchClaimableBalanceIdsForClaimant } from "./fetchClaimableBalances.js
 import { fetchOrderBookSellingCreditForNative } from "./fetchOrderBook.js";
 import { scanDefiProtocols } from "./defiScan.js";
 import { resolveSorobanRpcUrl, scanSorobanForAccount } from "./sorobanScan.js";
+import { buildSoroswapSellCreditToNativeXdr, soroswapBearerConfigured } from "./soroswapClient.js";
 
 /** Avoids URIError from `decodeURIComponent` on malformed `%` escapes (would otherwise yield HTTP 500). */
 function decodeAccountIdParam(raw: string): string {
@@ -247,11 +247,7 @@ app.get("/api/account/:accountId/health", async (request, reply) => {
   }
 
   try {
-    const [account, offersExist] = await Promise.all([
-      fetchAccountFromHorizon(id, network, request.log),
-      hasOpenOffers(id, network, request.log),
-    ]);
-    const offersCount = offersExist ? 1 : 0;
+    const account = await fetchAccountFromHorizon(id, network, request.log);
 
     if (!account) {
       const report = buildHealthReport({
@@ -272,7 +268,8 @@ app.get("/api/account/:accountId/health", async (request, reply) => {
       return reply.send(report);
     }
 
-    const [soroban, defiProtocols, claimableIdsResult] = await Promise.all([
+    const [sdexOffers, soroban, defiProtocols, claimableIdsResult] = await Promise.all([
+      fetchSdexOffersForSeller(id, network, request.log),
       scanSorobanForAccount({ accountId: id, horizonAccount: account, network, log: request.log }),
       scanDefiProtocols({ accountId: id, network, sorobanRpcUrl }),
       fetchClaimableBalanceIdsForClaimant(horizonUrl, id, request.log)
@@ -283,6 +280,10 @@ app.get("/api/account/:accountId/health", async (request, reply) => {
         }),
     ]);
     const inboundClaimableBalanceCount = claimableIdsResult.ok ? claimableIdsResult.ids.length : undefined;
+    const lpShares = extractLiquidityPoolSharesFromHorizonBalances(
+      account.balances as Array<Record<string, unknown>> | undefined,
+    );
+    const offersCount = sdexOffers.length;
 
     const report = buildHealthReport({
       accountId: id,
@@ -294,8 +295,8 @@ app.get("/api/account/:accountId/health", async (request, reply) => {
       soroban,
       inboundClaimableBalanceCount,
       openPositions: {
-        sdexOffers: [],
-        liquidityPoolShares: [],
+        sdexOffers,
+        liquidityPoolShares: lpShares,
         defiProtocols,
       },
     });
@@ -304,6 +305,63 @@ app.get("/api/account/:accountId/health", async (request, reply) => {
     request.log.error(e);
     return reply.status(502).send({
       error: "HORIZON_UPSTREAM",
+      message: e instanceof Error ? e.message : "Unknown error",
+    });
+  }
+});
+
+app.get("/api/soroswap/status", async () => ({ configured: soroswapBearerConfigured() }));
+
+app.post("/api/soroswap/swap-xdr", async (request, reply) => {
+  const network = parseNetworkQuery((request.query as { network?: string }).network);
+  const body = request.body as {
+    sourceAccount?: string;
+    assetCode?: string;
+    assetIssuer?: string;
+    sellAmount?: string;
+    slippageBps?: number;
+  };
+  const sourceAccount = typeof body.sourceAccount === "string" ? body.sourceAccount.trim() : "";
+  const assetCode = typeof body.assetCode === "string" ? body.assetCode.trim() : "";
+  const assetIssuer = typeof body.assetIssuer === "string" ? body.assetIssuer.trim() : "";
+  const sellAmount = typeof body.sellAmount === "string" ? body.sellAmount.trim() : "";
+  const slippageBps = typeof body.slippageBps === "number" && Number.isFinite(body.slippageBps) ? body.slippageBps : 100;
+
+  if (!isValidClassicAddress(sourceAccount)) {
+    return reply.status(400).send({ error: "INVALID_ADDRESS", message: "sourceAccount must be a valid classic G-address." });
+  }
+  if (!assetCode || assetCode.length > 12) {
+    return reply.status(400).send({ error: "INVALID_ASSET", message: "assetCode is required (max 12 chars)." });
+  }
+  if (!isValidClassicAddress(assetIssuer)) {
+    return reply.status(400).send({ error: "INVALID_ISSUER", message: "assetIssuer must be a valid classic G-address." });
+  }
+  if (!sellAmount) {
+    return reply.status(400).send({ error: "INVALID_AMOUNT", message: "sellAmount is required." });
+  }
+
+  if (!soroswapBearerConfigured()) {
+    return reply.status(503).send({
+      error: "SOROSWAP_NOT_CONFIGURED",
+      message: "Set SOROSWAP_BEARER_TOKEN on the API (JWT from https://api.soroswap.finance/docs) to build Soroswap routes.",
+    });
+  }
+
+  try {
+    const { xdr, quote } = await buildSoroswapSellCreditToNativeXdr({
+      network,
+      sourceAccount,
+      assetCode,
+      assetIssuer,
+      sellAmount,
+      slippageBps,
+      log: request.log,
+    });
+    return reply.send({ xdr, quote });
+  } catch (e) {
+    request.log.error(e);
+    return reply.status(502).send({
+      error: "SOROSWAP_UPSTREAM",
       message: e instanceof Error ? e.message : "Unknown error",
     });
   }
