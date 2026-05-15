@@ -93,7 +93,8 @@ export async function buildRevokeSponsorshipBatchXdr(params: {
 
   for (const r of pools) {
     if (!isRecord(r)) continue;
-    /* `sponsor=` filter already scopes to this sponsor; pool records may omit `sponsor` field. */
+    const poolSponsor = typeof r.sponsor === "string" ? r.sponsor : "";
+    if (poolSponsor !== sponsor) continue;
     const poolId = typeof r.id === "string" ? r.id : "";
     if (!poolId || seenPool.has(poolId)) continue;
     seenPool.add(poolId);
@@ -166,7 +167,9 @@ export async function buildRevokeSponsorshipBatchXdr(params: {
     }
   }
 
-  const ordered = [...claimableOps, ...offerOps, ...poolOps, ...trustOps, ...signerOps, ...accountOps];
+  /* Pools last: Horizon `/liquidity_pools?sponsor=` can return unrelated pools with `sponsor: null`;
+   * bogus revokes are `op_malformed` and would block real revokes if they filled the batch first. */
+  const ordered = [...claimableOps, ...offerOps, ...trustOps, ...signerOps, ...accountOps, ...poolOps];
 
   const totalDiscovered = ordered.length;
   const slice = ordered.slice(0, MAX_OPS);
