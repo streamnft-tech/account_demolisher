@@ -1,10 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { StellarWalletsKit } from "@creit.tech/stellar-wallets-kit/sdk";
 import { Asset } from "@stellar/stellar-sdk";
 import { isValidClassicAddress } from "@stellar/core";
 
 import type { UiNetwork } from "./network.js";
-import { ensureWalletKit, formatWalletError } from "./walletKit.js";
+import { ensureWalletKit, formatWalletError, signWithWallet } from "./walletKit.js";
 import { sdkPassphrase, submitSignedClassicTx } from "./classicClose.js";
 import {
   applySlippageToPrice,
@@ -187,7 +186,7 @@ export function TrustlineTeardownCard(props: {
     async (xdr: string) => {
       if (!walletAddress) throw new Error("Connect wallet first.");
       await ensureWalletKit(network);
-      const signed = await StellarWalletsKit.signTransaction(xdr, {
+      const signed = await signWithWallet(network, xdr, {
         networkPassphrase: sdkPassphrase(network),
         address: walletAddress,
       });
