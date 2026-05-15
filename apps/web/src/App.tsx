@@ -13,6 +13,7 @@ import {
 } from "./classicBlockerHandlers.js";
 import type { ClassicBatchResult } from "./classicClose.js";
 import { sdkPassphrase, submitSignedClassicTx } from "./classicClose.js";
+import { buildAccountMergeBatchXdr } from "./classicDemolish.js";
 import { TrustlineTeardownCard } from "./TrustlineTeardownCard.js";
 import "./App.css";
 
@@ -574,6 +575,7 @@ function AppShell() {
   const [walletBusy, setWalletBusy] = useState(false);
   const [walletError, setWalletError] = useState<string | null>(null);
   const [actionSuccess, setActionSuccess] = useState<string | null>(null);
+  const [mergeBusy, setMergeBusy] = useState(false);
 
   useEffect(() => {
     let dispose: (() => void) | undefined;
@@ -731,6 +733,40 @@ function AppShell() {
     },
     [health, network, source, walletAddress, refreshHealth, signSubmitClassicBatch],
   );
+
+  const runAccountMerge = useCallback(async () => {
+    const id = source.trim();
+    const dest = destination.trim();
+    if (!health?.horizonUrl || !walletAddress || !isValidClassicAddress(id) || !isValidClassicAddress(dest)) return;
+    if (!health.canDemolish) {
+      setWalletError("Health scan must report merge-ready state before submitting ACCOUNT_MERGE.");
+      return;
+    }
+    if (id === dest) {
+      setWalletError("Destination must differ from the source account.");
+      return;
+    }
+    setMergeBusy(true);
+    setWalletError(null);
+    setActionSuccess(null);
+    try {
+      const batch = await buildAccountMergeBatchXdr({
+        horizonUrl: health.horizonUrl,
+        sourceAccount: id,
+        destinationAccount: dest,
+        network,
+      });
+      const { hash } = await signSubmitClassicBatch(batch);
+      setActionSuccess(
+        `Account merge submitted. Tx ${hash.slice(0, 10)}… Native XLM (minus fee) credits the destination; this account should disappear once Horizon confirms.`,
+      );
+      await refreshHealth();
+    } catch (e) {
+      setWalletError(formatWalletError(e));
+    } finally {
+      setMergeBusy(false);
+    }
+  }, [health, network, source, destination, walletAddress, refreshHealth, signSubmitClassicBatch]);
 
   const destOk = isValidClassicAddress(destination.trim());
   const blocking = health?.blockers.filter((b: Blocker) => b.kind === "blocking") ?? [];
@@ -933,6 +969,80 @@ function AppShell() {
             </section>
           ) : null}
 
+          {health?.openPositions && accountKnown ? (
+            <section className="card">
+              <h2 className="cardTitle">Open positions (scan)</h2>
+              <p className="hint">
+                Fetched with your last health run on <strong>{network}</strong>: SDEX offers from Horizon, pool shares from
+                balances, and DeFi protocol surfaces (Blend scan where available).
+              </p>
+              {(() => {
+                const op = health.openPositions!;
+                const offers = op.sdexOffers ?? [];
+                const lp = op.liquidityPoolShares ?? [];
+                const defi = op.defiProtocols ?? [];
+                if (offers.length === 0 && lp.length === 0 && defi.length === 0) {
+                  return <p className="meta">No offers, LP shares, or protocol rows on this report.</p>;
+                }
+                return (
+                  <>
+                    {offers.length > 0 ? (
+                      <>
+                        <h3 className="checklistTitle">Classic SDEX offers ({offers.length})</h3>
+                        <ul className="trustlineList">
+                          {offers.map((o) => (
+                            <li key={o.id} className="trustlineItem">
+                              <div className="trustlineHead">
+                                <strong>Offer #{o.id}</strong>
+                                <span className="meta">
+                                  {o.amount} @ {o.price}
+                                </span>
+                              </div>
+                              <p className="meta">
+                                Sell {o.selling} → buy {o.buying}
+                              </p>
+                            </li>
+                          ))}
+                        </ul>
+                      </>
+                    ) : null}
+                    {lp.length > 0 ? (
+                      <>
+                        <h3 className="checklistTitle">Liquidity pool shares ({lp.length})</h3>
+                        <ul className="trustlineList">
+                          {lp.map((p) => (
+                            <li key={p.poolId} className="trustlineItem">
+                              <div className="trustlineHead">
+                                <strong>Pool {p.poolId.slice(0, 8)}…</strong>
+                                <span className="meta">{p.balance} shares</span>
+                              </div>
+                            </li>
+                          ))}
+                        </ul>
+                      </>
+                    ) : null}
+                    {defi.length > 0 ? (
+                      <>
+                        <h3 className="checklistTitle">DeFi protocol surface</h3>
+                        <ul className="trustlineList">
+                          {defi.map((d) => (
+                            <li key={d.id} className="trustlineItem">
+                              <div className="trustlineHead">
+                                <strong>{d.label}</strong>
+                                <span className="meta">{d.status}</span>
+                              </div>
+                              <p className="checklistDetail">{d.detail}</p>
+                            </li>
+                          ))}
+                        </ul>
+                      </>
+                    ) : null}
+                  </>
+                );
+              })()}
+            </section>
+          ) : null}
+
           {showTrustlineTeardown && health?.horizonUrl ? (
             <TrustlineTeardownCard
               accountId={source.trim()}
@@ -1051,9 +1161,30 @@ function AppShell() {
             {accountKnown ? (
               <section className="card">
                 <h2 className="cardTitle">Step 4 — Demolish</h2>
-                <p className="hint">Enabled only when health reports zero <em>blocking</em> issues and destination is valid.</p>
-                <button type="button" className="btn danger" disabled={!canDemolish} title={canDemolish ? undefined : "Clear blockers and set destination first"}>
-                  Demolish account (merge)
+                <p className="hint">
+                  Submits one <code className="inlineCode">ACCOUNT_MERGE</code> to your destination. Native XLM (minus the
+                  network fee) is credited there; non-native assets are not moved. The destination must already exist on
+                  this network.
+                </p>
+                <button
+                  type="button"
+                  className="btn danger"
+                  disabled={
+                    !canDemolish ||
+                    mergeBusy ||
+                    walletBusy ||
+                    !walletAddress ||
+                    Boolean(walletMismatch) ||
+                    !health?.horizonUrl
+                  }
+                  title={
+                    canDemolish
+                      ? "Sign merge in wallet — irreversible once confirmed on-chain"
+                      : "Clear blockers and set a valid destination first"
+                  }
+                  onClick={() => void runAccountMerge()}
+                >
+                  {mergeBusy ? "Submitting merge…" : "Demolish account (merge)"}
                 </button>
                 {!canDemolish ? (
                   <p className="meta">
