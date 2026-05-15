@@ -7,6 +7,7 @@ import {
   disconnectWallet as disconnectWalletFromKit,
   ensureWalletKit,
   formatWalletError,
+  openWalletProfile as openWalletProfileWithKit,
   signWithWallet,
 } from "./walletKit.js";
 import { runClassicBlockerFix } from "./classicBlockerHandlers.js";
@@ -1036,8 +1037,7 @@ function AppShell() {
     setWalletError(null);
     setWalletBusy(true);
     try {
-      const { address } = await connectWalletWithKit(network);
-      setWalletAddress(address);
+      await openWalletProfileWithKit(network);
     } catch (e) {
       setWalletError(formatWalletError(e));
     } finally {

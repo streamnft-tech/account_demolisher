@@ -1,96 +1,69 @@
+import { Networks, StellarWalletsKit } from "@creit.tech/stellar-wallets-kit";
 import {
-  AlbedoModule,
-  ALBEDO_ID,
-  FreighterModule,
-  FREIGHTER_ID,
-  LobstrModule,
-  LOBSTR_ID,
-  StellarWalletsKit,
-  WalletNetwork,
-  xBullModule,
-  XBULL_ID,
-} from "@creit.tech/stellar-wallets-kit";
+  WalletConnectModule,
+  type TWalletConnectModuleParams,
+  WalletConnectTargetChain,
+} from "@creit.tech/stellar-wallets-kit/modules/wallet-connect";
+import { defaultModules } from "@creit.tech/stellar-wallets-kit/modules/utils";
+import type { ModuleInterface } from "@creit.tech/stellar-wallets-kit/types";
 
 import type { UiNetwork } from "./network.js";
 
-let activeKit: StellarWalletsKit | null = null;
 let activeNetwork: UiNetwork | null = null;
-let selectedWalletId = FREIGHTER_ID;
 
-function kitNetwork(ui: UiNetwork): WalletNetwork {
-  return ui === "mainnet" ? WalletNetwork.PUBLIC : WalletNetwork.TESTNET;
+function kitNetwork(ui: UiNetwork): Networks {
+  return ui === "mainnet" ? Networks.PUBLIC : Networks.TESTNET;
 }
 
-async function buildModules(uiNetwork: UiNetwork) {
-  const modules = [new FreighterModule(), new AlbedoModule(), new xBullModule(), new LobstrModule()];
+async function buildModules(uiNetwork: UiNetwork): Promise<ModuleInterface[]> {
+  const modules: ModuleInterface[] = [...defaultModules()];
   const wc = import.meta.env.VITE_WALLETCONNECT_PROJECT_ID?.trim();
   if (wc) {
-    const { WalletConnectAllowedMethods, WalletConnectModule } = await import(
-      "@creit.tech/stellar-wallets-kit/modules/walletconnect.module"
-    );
+    const metadata: TWalletConnectModuleParams["metadata"] = {
+      name: "Account Demolisher",
+      description: "Sign classic Stellar transactions to close offers and LP before account merge.",
+      url: typeof window !== "undefined" ? window.location.origin : "http://localhost",
+      icons: [],
+    };
     modules.push(
       new WalletConnectModule({
         projectId: wc,
-        name: "Account Demolisher",
-        description: "Sign classic Stellar transactions to close offers and LP before account merge.",
-        url: typeof window !== "undefined" ? window.location.origin : "http://localhost",
-        icons: [],
-        method: WalletConnectAllowedMethods.SIGN,
-        network: kitNetwork(uiNetwork),
+        metadata,
+        allowedChains: [uiNetwork === "mainnet" ? WalletConnectTargetChain.PUBLIC : WalletConnectTargetChain.TESTNET],
       }),
     );
   }
   return modules;
 }
 
-export async function ensureWalletKit(uiNetwork: UiNetwork): Promise<StellarWalletsKit> {
-  if (activeKit && activeNetwork === uiNetwork) return activeKit;
-
-  activeKit = new StellarWalletsKit({
-    selectedWalletId,
+/** Ensures the wallets kit is initialized for the given UI network (modules + passphrase context). */
+export async function ensureWalletKit(uiNetwork: UiNetwork): Promise<void> {
+  if (activeNetwork === uiNetwork) return;
+  const modules = await buildModules(uiNetwork);
+  StellarWalletsKit.init({
+    modules,
     network: kitNetwork(uiNetwork),
-    modules: await buildModules(uiNetwork),
   });
   activeNetwork = uiNetwork;
-  return activeKit;
 }
 
 export async function connectWallet(uiNetwork: UiNetwork): Promise<{ address: string }> {
-  const kit = await ensureWalletKit(uiNetwork);
-
-  return new Promise<{ address: string }>((resolve, reject) => {
-    let settled = false;
-
-    const finish = (fn: () => void) => {
-      if (settled) return;
-      settled = true;
-      fn();
-    };
-
-    void kit.openModal({
-      modalTitle: "Choose a Stellar wallet",
-      onWalletSelected: (wallet) => {
-        void (async () => {
-          try {
-            selectedWalletId = wallet.id || selectedWalletId;
-            kit.setWallet(selectedWalletId);
-            const result = await kit.getAddress();
-            finish(() => resolve(result));
-          } catch (error) {
-            finish(() => reject(error));
-          }
-        })();
-      },
-      onClosed: (error) => {
-        finish(() => reject(error ?? new Error("Wallet selection cancelled.")));
-      },
-    });
-  });
+  await ensureWalletKit(uiNetwork);
+  return StellarWalletsKit.authModal();
 }
 
 export async function disconnectWallet(uiNetwork: UiNetwork): Promise<void> {
-  const kit = await ensureWalletKit(uiNetwork);
-  await kit.disconnect();
+  try {
+    await ensureWalletKit(uiNetwork);
+    await StellarWalletsKit.disconnect();
+  } finally {
+    activeNetwork = null;
+  }
+}
+
+export async function openWalletProfile(uiNetwork: UiNetwork): Promise<void> {
+  await ensureWalletKit(uiNetwork);
+  await StellarWalletsKit.profileModal();
 }
 
 export async function signWithWallet(
@@ -98,8 +71,12 @@ export async function signWithWallet(
   xdr: string,
   opts?: { networkPassphrase?: string; address?: string; path?: string; submit?: boolean; submitUrl?: string },
 ) {
-  const kit = await ensureWalletKit(uiNetwork);
-  return kit.signTransaction(xdr, opts);
+  await ensureWalletKit(uiNetwork);
+  return StellarWalletsKit.signTransaction(xdr, {
+    networkPassphrase: opts?.networkPassphrase,
+    address: opts?.address,
+    path: opts?.path,
+  });
 }
 
 /** Human-readable message for kit / modal errors (`{ code, message }` or `Error`). */
@@ -110,10 +87,3 @@ export function formatWalletError(e: unknown): string {
   if (e instanceof Error) return e.message;
   return "Wallet action failed.";
 }
-
-export const availableWalletIds = {
-  albedo: ALBEDO_ID,
-  freighter: FREIGHTER_ID,
-  lobstr: LOBSTR_ID,
-  xbull: XBULL_ID,
-};
