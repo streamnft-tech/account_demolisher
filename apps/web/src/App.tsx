@@ -14,7 +14,7 @@ import { runClassicBlockerFix } from "./classicBlockerHandlers.js";
 import type { ClassicBatchResult } from "./classicClose.js";
 import { sdkPassphrase, submitSignedClassicTx } from "./classicClose.js";
 import { buildAccountMergeBatchXdr } from "./classicDemolish.js";
-import { TrustlineTeardownCard } from "./TrustlineTeardownCard.js";
+import { TrustlineTeardownCard, type TrustlineCleanupSummary } from "./TrustlineTeardownCard.js";
 import "./App.css";
 
 type RouteMode = "landing" | "app";
@@ -29,6 +29,8 @@ type WatchlistEntry = {
   readyToClose?: boolean;
   nativeBalanceXlm?: number;
 };
+
+const BASE_RESERVE_XLM = 0.5;
 
 const HEALTH_FETCH_TIMEOUT_MS = 90_000;
 const WATCHLIST_STORAGE_KEY = "stellar-sweep-watchlist";
@@ -645,7 +647,7 @@ function scanRowCopy(label: string, row: HealthChecklistItem | undefined, health
   if (label === "Recoverable reserve") {
     return {
       value: "Available",
-      detail: "Remaining native XLM can be sent to a destination when the account is closed.",
+      detail: "This estimates the XLM reserve tied to active trustlines that can be released as those lines are resolved.",
       tone: "pass",
     };
   }
@@ -669,12 +671,12 @@ function scanRowCopy(label: string, row: HealthChecklistItem | undefined, health
   if (label === "Open offers") {
     return row?.status === "pass"
       ? { value: "Clean", detail: "No open offers found.", tone: "pass" }
-      : { value: "Needs cleanup", detail: "Open offers should be cancelled before removing related trustlines.", tone: "fail" };
+      : { value: "Needs cleanup", detail: "Open DEX offers should be cancelled before closing the account.", tone: "fail" };
   }
   if (label === "Extra signers") {
     return row?.status === "pass"
-      ? { value: "Clean", detail: "No extra signers detected.", tone: "pass" }
-      : { value: "Needs review", detail: "Extra signers may require additional approvals before cleanup or closure.", tone: "fail" };
+      ? { value: "Clean", detail: "No extra signers or multisig relationships were detected.", tone: "pass" }
+      : { value: "Needs review", detail: "This account appears to use extra signers or participate in a multisig-style approval setup.", tone: "fail" };
   }
   if (label === "Thresholds") {
     return row?.status === "pass"
@@ -713,7 +715,7 @@ function scanRowCopy(label: string, row: HealthChecklistItem | undefined, health
   if (label === "Claimable balances") {
     return row?.status === "pass"
       ? { value: "Clean", detail: "No pending claimable balances found.", tone: "pass" }
-      : { value: "Available", detail: "Claimable balances can be claimed or skipped depending on cleanup goals.", tone: "fail" };
+      : { value: "Available", detail: "These are inbound balances claimable to this account, separate from reserve locked inside trustlines.", tone: "fail" };
   }
   if (label === "Sponsorships") {
     return row?.status === "pass"
@@ -802,6 +804,8 @@ function AccountStateDetails({
   onConnectWallet,
   onCloseStep,
   onResolveClassicBlocker,
+  trustlinePanel,
+  embedded = false,
 }: {
   health: HealthReport;
   checklist: HealthChecklistItem[];
@@ -810,6 +814,8 @@ function AccountStateDetails({
   onConnectWallet: () => void;
   onCloseStep: () => void;
   onResolveClassicBlocker: (code: BlockerCode) => void;
+  trustlinePanel?: ReactNode;
+  embedded?: boolean;
 }) {
   const byId = new Map(checklist.map((row) => [row.id, row]));
   const groups = [
@@ -823,11 +829,8 @@ function AccountStateDetails({
       ] as Array<[string, HealthChecklistItem | undefined]>,
     },
     {
-      title: "Trustlines and offers",
-      rows: [
-        ["Trustlines", byId.get("classic_trustlines")],
-        ["Open offers", byId.get("classic_open_offers")],
-      ] as Array<[string, HealthChecklistItem | undefined]>,
+      title: "Trustlines",
+      rows: [["Trustlines", byId.get("classic_trustlines")]] as Array<[string, HealthChecklistItem | undefined]>,
     },
     {
       title: "Permissions and signers",
@@ -840,6 +843,7 @@ function AccountStateDetails({
     {
       title: "Open positions",
       rows: [
+        ["Open offers", byId.get("classic_open_offers")],
         ["LP positions", byId.get("classic_amm_lp_shares")],
         ["DeFi positions", byId.get("defi_positions")],
         ["Protocol surfaces", byId.get("defi_positions")],
@@ -865,7 +869,7 @@ function AccountStateDetails({
   const protocols = health.openPositions?.defiProtocols ?? [];
 
   return (
-    <section className="card consolePrimaryCard">
+    <section className={embedded ? "snapshotDetails" : "card consolePrimaryCard"}>
       <div className="sectionHeaderRow">
         <div>
           <h2 className="cardTitle">Actionable scan report</h2>
@@ -877,7 +881,24 @@ function AccountStateDetails({
         {groups.map((group) => (
           <details key={group.title} className="stateDetailGroup">
             <summary className="stateDetailGroupSummary">
-              <h3>{group.title}</h3>
+              <div className="stateDetailGroupHeading">
+                <h3>{group.title}</h3>
+                <p>
+                  {group.title === "Trustlines"
+                    ? "Per-token trustline cleanup and reserve-release actions."
+                    : group.title === "Sponsorships"
+                      ? "Sponsored entries and reserve relationships that can block close."
+                      : group.title === "Permissions and signers"
+                        ? "Multisig, signer relationships, allowances, and thresholds that affect account control."
+                        : group.title === "Open positions"
+                          ? "DEX offers, liquidity positions, protocol surfaces, and manual review signals."
+                          : group.title === "Claimable balances"
+                            ? "Inbound balances that can be claimed before closure."
+                            : group.title === "Close readiness"
+                              ? "Destination setup and final close-state checks."
+                              : "Balances and reserve-related details for final payout."}
+                </p>
+              </div>
               <span className="stateDetailGroupMeta">
                 <span>
                   {group.rows.length} detail{group.rows.length === 1 ? "" : "s"}
@@ -958,6 +979,9 @@ function AccountStateDetails({
                   </details>
                 );
               })}
+              {group.title === "Trustlines" && trustlinePanel ? (
+                <div className="scanReportEmbeddedPanel">{trustlinePanel}</div>
+              ) : null}
             </div>
           </details>
         ))}
@@ -1002,6 +1026,7 @@ function AppShell() {
   const [closeConfirm, setCloseConfirm] = useState("");
   const [didAutoloadQueryAccount, setDidAutoloadQueryAccount] = useState(false);
   const [mergeBusy, setMergeBusy] = useState(false);
+  const [trustlineSummary, setTrustlineSummary] = useState<TrustlineCleanupSummary | null>(null);
 
   useEffect(() => {
     void ensureWalletKit(network);
@@ -1098,6 +1123,7 @@ function AppShell() {
   );
 
   const runHealthCheck = useCallback(async () => {
+    setTrustlineSummary(null);
     await scanAccount(source.trim(), network);
   }, [source, network, scanAccount]);
 
@@ -1109,6 +1135,7 @@ function AppShell() {
     setLastScannedAt(null);
     setDestination("");
     setCloseConfirm("");
+    setTrustlineSummary(null);
   }, []);
 
   const refreshHealth = useCallback(async () => {
@@ -1231,27 +1258,18 @@ function AppShell() {
   const isSaved = watchlist.some((entry) => entry.accountId === sourceTrim && entry.network === network);
   const readyByHealth = health?.canDemolish === true;
   const checklistById = new Map(checklist.map((row) => [row.id, row]));
+  const trustlineReserveXlm =
+    trustlineSummary
+      ? trustlineSummary.total * BASE_RESERVE_XLM
+      : checklistById.get("classic_trustlines")?.status === "pass"
+        ? 0
+        : undefined;
   const protocolReviewCount =
     health?.openPositions?.defiProtocols.filter((protocol) => protocol.status === "unknown" || protocol.status === "fail").length ?? 0;
   const openPositionCount =
     (health?.openPositions?.liquidityPoolShares.length ?? 0) + (health?.openPositions?.sdexOffers.length ?? 0);
   const accountStatusLabel = !health ? "Requires scan" : health.canDemolish ? "Technically ready" : blocking.length > 0 ? "Needs cleanup" : "Needs review";
   const trustlinesLabel = checklistById.get("classic_trustlines")?.status === "pass" ? "0 active" : checklistById.get("classic_trustlines") ? "Active" : "Unable to verify";
-  const priorityFindings = health
-    ? [
-        blocking.length === 0
-          ? ["No required blockers found", "Classic account checks did not return active blockers."]
-          : [`${blocking.length} blocker${blocking.length === 1 ? "" : "s"} found`, blocking[0]?.description ?? "Review required cleanup rows."],
-        protocolReviewCount > 0
-          ? ["Manual protocol review suggested", `${protocolReviewCount} protocol check${protocolReviewCount === 1 ? "" : "s"} should be reviewed before closing.`]
-          : ["No protocol blockers returned", "The current protocol scan did not return blocking DeFi positions."],
-        checklistById.get("soroban_allowances")?.status === "skipped" || checklistById.get("soroban_allowances")?.status === "unknown"
-          ? ["Allowances not fully verified", "Configure known spender contracts to verify token allowances."]
-          : ["Allowances checked", "The configured allowance checks did not return active approvals."],
-        ["Destination not confirmed", "Add a destination before closing the account."],
-      ]
-    : [];
-
   useEffect(() => {
     if (!health || !sourceTrim) return;
     setWatchlist((prev) =>
@@ -1358,14 +1376,25 @@ function AppShell() {
 
           <section className="consoleContent">
             <div className="consoleTopbar">
-              <div className="consoleTopbarSpacer" aria-hidden />
               <div className="consoleTopbarActions">
+                <div className="topbarNetworkControl">
+                  <span>Network</span>
+                  <label className="networkSelectWrap" aria-label="Stellar network">
+                    <select
+                      className="networkSelect"
+                      value={network}
+                      onChange={(event) => {
+                        setNetwork(event.target.value as UiNetwork);
+                        setHealth(null);
+                      }}
+                    >
+                      <option value="testnet">Testnet</option>
+                      <option value="mainnet">Mainnet</option>
+                    </select>
+                  </label>
+                </div>
                 {walletAddress ? (
                   <>
-                    <div className="topbarWalletState">
-                      <span>Wallet:</span>
-                      <strong>{formatAccount(walletAddress)}</strong>
-                    </div>
                     <button type="button" className="btn secondary" disabled={walletBusy} onClick={openWalletProfile}>
                       Switch Wallet
                     </button>
@@ -1375,10 +1404,6 @@ function AppShell() {
                   </>
                 ) : (
                   <>
-                    <div className="topbarWalletState">
-                      <span>Wallet:</span>
-                      <strong>Not connected</strong>
-                    </div>
                     <button type="button" className="btn secondary" disabled={walletBusy} onClick={connectWallet}>
                       {walletBusy ? "Opening…" : "Connect Wallet"}
                     </button>
@@ -1391,32 +1416,18 @@ function AppShell() {
               <>
                 <div className="pageIntro pageHeader pageHeader--simple">
                   <div className="pageHeaderCopy">
-                    <SectionKicker>Scan</SectionKicker>
-                    <h1>Check account health before cleanup.</h1>
-                    <p>
-                      Enter a Stellar address to scan reserves, trustlines, permissions, positions, and close readiness.
-                      No signing required.
-                    </p>
-                    <div className="trustChipRow" aria-label="Scan safety">
-                      <span>Read-only scan</span>
-                      <span>No wallet signature</span>
-                      <span>Cleanup approval later</span>
-                    </div>
+                    <h1>Check account health.</h1>
                   </div>
                 </div>
 
                 <section className="scanWorkspace">
                   <div className="card consolePrimaryCard scanFormCard">
                     <div>
-                      <h2 className="cardTitle">Scan account</h2>
-                      <p className="hint">Start with a public address. Cleanup actions require wallet approval later.</p>
+                      <h2 className="cardTitle">Scan a Stellar address</h2>
                     </div>
 
                     <div className="overviewControls">
                       <div className="overviewControlBlock">
-                        <label className="label" htmlFor="source">
-                          Stellar address
-                        </label>
                         <input
                           id="source"
                           className="input"
@@ -1431,40 +1442,13 @@ function AppShell() {
                           autoCapitalize="none"
                         />
                       </div>
-                      <div className="overviewControlBlock">
-                        <div className="label">Network</div>
-                        <div className="segmented" role="group" aria-label="Stellar network">
-                          <button
-                            type="button"
-                            className={`seg ${network === "testnet" ? "active" : ""}`}
-                            onClick={() => {
-                              setNetwork("testnet");
-                              setHealth(null);
-                            }}
-                          >
-                            Testnet
-                          </button>
-                          <button
-                            type="button"
-                            className={`seg ${network === "mainnet" ? "active" : ""}`}
-                            onClick={() => {
-                              setNetwork("mainnet");
-                              setHealth(null);
-                            }}
-                          >
-                            Mainnet
-                          </button>
-                        </div>
-                      </div>
                     </div>
 
                     <div className="sectionActions">
                       <button type="button" className="btn primary scanSubmit" disabled={loading} onClick={runHealthCheck}>
-                        {loading ? "Scanning…" : "Scan Account"}
+                        {loading ? "Scanning…" : "Scan a Stellar address"}
                       </button>
                     </div>
-
-                    <p className="meta">Scanning is read-only. Wallet approval is only needed for cleanup actions.</p>
                     {walletError ? <p className="error">{walletError}</p> : null}
                     {error ? <p className="error">{error}</p> : null}
                     {walletMismatch ? (
@@ -1474,8 +1458,10 @@ function AppShell() {
                       </p>
                     ) : null}
                   </div>
+                </section>
 
-                  <aside className="scanInfoStack">
+                {!health ? (
+                  <section className="scanInfoRow">
                     <article className="card consolePrimaryCard scanInfoCard">
                       <h2 className="cardTitle">What the scan checks</h2>
                       <ul className="scanCheckList">
@@ -1491,20 +1477,18 @@ function AppShell() {
                         through your wallet.
                       </p>
                     </article>
-                    {!health ? (
-                      <article className="card consolePrimaryCard scanInfoCard scanEmptyState">
-                        <h2 className="cardTitle">Ready when you are.</h2>
-                        <p className="hint">Run a read-only scan to see account state, cleanup blockers, and recoverable XLM.</p>
-                      </article>
-                    ) : null}
-                  </aside>
-                </section>
+                    <article className="card consolePrimaryCard scanInfoCard scanEmptyState">
+                      <h2 className="cardTitle">Ready when you are.</h2>
+                      <p className="hint">Run a read-only scan to see account state, cleanup blockers, and recoverable XLM.</p>
+                    </article>
+                  </section>
+                ) : null}
 
                 {health ? (
                   <section className="card consolePrimaryCard">
                     <div className="sectionHeaderRow">
                       <div>
-                        <h2 className="cardTitle">Latest scan</h2>
+                        <h2 className="cardTitle">Account health snapshot</h2>
                         <p className={`summary ${health.canDemolish ? "ok" : "warn"}`}>{health.summary}</p>
                       </div>
                     </div>
@@ -1515,12 +1499,26 @@ function AppShell() {
                         <strong>{accountStatusLabel}</strong>
                       </div>
                       <div className="summaryCard">
-                        <span>Recoverable XLM</span>
-                        <strong>{formatXlmCompact(health.nativeBalanceXlm)}</strong>
+                        <span>Recoverable reserve</span>
+                        <strong>{formatXlmCompact(trustlineReserveXlm)}</strong>
+                        <small>
+                          {typeof trustlineReserveXlm === "number"
+                            ? "Estimated XLM locked in active trustlines."
+                            : "Requires trustline scan details."}
+                        </small>
                       </div>
                       <div className="summaryCard">
                         <span>Trustlines</span>
-                        <strong>{trustlinesLabel}</strong>
+                        <strong>
+                          {trustlineSummary
+                            ? `${trustlineSummary.total} token line${trustlineSummary.total === 1 ? "" : "s"}`
+                            : trustlinesLabel}
+                        </strong>
+                        {trustlineSummary ? (
+                          <small>
+                            {trustlineSummary.funded} funded · {trustlineSummary.empty} ready to remove
+                          </small>
+                        ) : null}
                       </div>
                       <div className="summaryCard">
                         <span>Open positions</span>
@@ -1532,17 +1530,37 @@ function AppShell() {
                       </div>
                     </div>
 
-                    <div className="priorityFindings">
-                      <h3>Priority findings</h3>
-                      <div className="priorityFindingGrid">
-                        {priorityFindings.map(([title, body]) => (
-                          <article key={title} className="priorityFinding">
-                            <strong>{title}</strong>
-                            <p>{body}</p>
-                          </article>
-                        ))}
-                      </div>
-                    </div>
+                    <AccountStateDetails
+                      embedded
+                      health={health}
+                      checklist={checklist}
+                      walletConnected={Boolean(walletAddress)}
+                      walletBusy={walletBusy}
+                      onConnectWallet={connectWallet}
+                      onCloseStep={() => setActiveSection("close")}
+                      onResolveClassicBlocker={(code) => {
+                        void resolveClassicBlocker(code);
+                      }}
+                      trustlinePanel={
+                        showTrustlineTeardown && health.horizonUrl ? (
+                          <TrustlineTeardownCard
+                            embedded
+                            accountId={sourceTrim}
+                            network={network}
+                            horizonUrl={health.horizonUrl}
+                            walletAddress={walletAddress}
+                            walletMismatch={Boolean(walletMismatch)}
+                            walletBusy={walletBusy}
+                            setWalletBusy={setWalletBusy}
+                            setWalletError={setWalletError}
+                            setActionSuccess={setActionSuccess}
+                            offersBlocked={checklistById.get("classic_open_offers")?.status === "fail"}
+                            onSummaryChange={setTrustlineSummary}
+                            onSubmitted={refreshHealth}
+                          />
+                        ) : undefined
+                      }
+                    />
 
                     <div className="sectionActions">
                       <button type="button" className="btn primary" onClick={() => setActiveSection("close")}>
@@ -1563,32 +1581,30 @@ function AppShell() {
                 ) : null}
 
                 {health ? (
-                  <AccountStateDetails
-                    health={health}
-                    checklist={checklist}
-                    walletConnected={Boolean(walletAddress)}
-                    walletBusy={walletBusy}
-                    onConnectWallet={connectWallet}
-                    onCloseStep={() => setActiveSection("close")}
-                    onResolveClassicBlocker={(code) => {
-                      void resolveClassicBlocker(code);
-                    }}
-                  />
-                ) : null}
-
-                {showTrustlineTeardown && health?.horizonUrl ? (
-                  <TrustlineTeardownCard
-                    accountId={sourceTrim}
-                    network={network}
-                    horizonUrl={health.horizonUrl}
-                    walletAddress={walletAddress}
-                    walletMismatch={Boolean(walletMismatch)}
-                    walletBusy={walletBusy}
-                    setWalletBusy={setWalletBusy}
-                    setWalletError={setWalletError}
-                    setActionSuccess={setActionSuccess}
-                    onSubmitted={refreshHealth}
-                  />
+                  <section className="scanInfoRow">
+                    <article className="card consolePrimaryCard scanInfoCard">
+                      <h2 className="cardTitle">What the scan checks</h2>
+                      <ul className="scanCheckList">
+                        {["Recoverable XLM", "Trustlines and offers", "Permissions and signers", "Open positions", "Close readiness"].map((item) => (
+                          <li key={item}>{item}</li>
+                        ))}
+                      </ul>
+                    </article>
+                    <article className="card consolePrimaryCard scanInfoCard">
+                      <h2 className="cardTitle">Non-custodial by design</h2>
+                      <p className="hint">
+                        Stellar Sweep never needs your private key to scan. Actions are reviewed separately and signed
+                        through your wallet.
+                      </p>
+                    </article>
+                    <article className="card consolePrimaryCard scanInfoCard">
+                      <h2 className="cardTitle">Snapshot focus</h2>
+                      <p className="hint">
+                        Trustlines, sponsorships, allowances, and close blockers now map directly into the account health
+                        snapshot below with action buttons on each row.
+                      </p>
+                    </article>
+                  </section>
                 ) : null}
 
                 {health ? (

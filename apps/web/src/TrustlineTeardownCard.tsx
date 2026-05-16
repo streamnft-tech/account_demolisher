@@ -25,8 +25,21 @@ type BookState =
   | { status: "ok"; thin: boolean; bestPrice: string | null }
   | { status: "error"; message: string };
 
+type TrustlineActionMode = "sdex" | "soroswap" | "payout" | "remove";
+
+export type TrustlineCleanupSummary = {
+  total: number;
+  funded: number;
+  empty: number;
+  assetCodes: string[];
+};
+
 function rowKey(r: CreditTrustlineRow): string {
   return `${r.assetCode}:${r.assetIssuer}`;
+}
+
+function issuerLabel(issuer: string): string {
+  return `${issuer.slice(0, 5)}…${issuer.slice(-4)}`;
 }
 
 export function TrustlineTeardownCard(props: {
@@ -39,7 +52,10 @@ export function TrustlineTeardownCard(props: {
   setWalletBusy: (v: boolean) => void;
   setWalletError: (msg: string | null) => void;
   setActionSuccess: (msg: string | null) => void;
+  offersBlocked?: boolean;
+  onSummaryChange?: (summary: TrustlineCleanupSummary) => void;
   onSubmitted: () => Promise<void>;
+  embedded?: boolean;
 }) {
   const {
     accountId,
@@ -51,7 +67,10 @@ export function TrustlineTeardownCard(props: {
     setWalletBusy,
     setWalletError,
     setActionSuccess,
+    offersBlocked = false,
+    onSummaryChange,
     onSubmitted,
+    embedded = false,
   } = props;
 
   const [rows, setRows] = useState<CreditTrustlineRow[]>([]);
@@ -63,6 +82,7 @@ export function TrustlineTeardownCard(props: {
   const [slippageBpsByKey, setSlippageBpsByKey] = useState<Record<string, number>>({});
   const [issuerHintsByKey, setIssuerHintsByKey] = useState<Record<string, string[]>>({});
   const [soroswapConfigured, setSoroswapConfigured] = useState<boolean | null>(null);
+  const [actionModeByKey, setActionModeByKey] = useState<Record<string, TrustlineActionMode>>({});
 
   const ready =
     Boolean(walletAddress) && !walletMismatch && walletAddress === accountId && Boolean(horizonUrl);
@@ -114,6 +134,16 @@ export function TrustlineTeardownCard(props: {
 
   const positiveRows = useMemo(() => rows.filter((r) => r.balanceNum > 1e-7), [rows]);
   const zeroRows = useMemo(() => rows.filter((r) => r.balanceNum <= 1e-7), [rows]);
+  const allRows = useMemo(() => [...positiveRows, ...zeroRows], [positiveRows, zeroRows]);
+
+  useEffect(() => {
+    onSummaryChange?.({
+      total: rows.length,
+      funded: positiveRows.length,
+      empty: zeroRows.length,
+      assetCodes: rows.map((row) => row.assetCode),
+    });
+  }, [rows, positiveRows.length, zeroRows.length, onSummaryChange]);
 
   useEffect(() => {
     let cancelled = false;
@@ -197,6 +227,29 @@ export function TrustlineTeardownCard(props: {
       return n;
     });
   }, [rows]);
+
+  useEffect(() => {
+    setActionModeByKey((prev) => {
+      const next = { ...prev };
+      for (const row of rows) {
+        const key = rowKey(row);
+        if (next[key]) continue;
+        if (row.balanceNum <= 1e-7) {
+          next[key] = "remove";
+          continue;
+        }
+        const book = bookByKey[key];
+        if (book?.status === "ok" && !book.thin && book.bestPrice) {
+          next[key] = "sdex";
+        } else if (soroswapConfigured === true) {
+          next[key] = "soroswap";
+        } else {
+          next[key] = "payout";
+        }
+      }
+      return next;
+    });
+  }, [rows, bookByKey, soroswapConfigured]);
 
   const signSubmit = useCallback(
     async (xdr: string) => {
@@ -361,153 +414,246 @@ export function TrustlineTeardownCard(props: {
 
   if (rows.length === 0 && !loadErr) {
     return (
-      <div className="card trustlineCard">
-        <h2 className="cardTitle">Trustlines &amp; non-native balances</h2>
-        <p className="meta">No classic credit lines on this account.</p>
+      <div className={embedded ? "trustlineEmbedded trustlineEmbedded--empty" : "card trustlineCard"}>
+        <div className="sectionHeaderRow">
+          <div>
+            <h2 className={embedded ? "trustlineEmbeddedTitle" : "cardTitle"}>
+              {embedded ? "Per-token cleanup planner" : "Trustlines and offers"}
+            </h2>
+            <p className="hint">No funded credit lines were returned by the latest scan.</p>
+          </div>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="card trustlineCard">
-      <h2 className="cardTitle">Trustlines &amp; non-native balances</h2>
-      <p className="hint">
-        Per-asset cleanup: optional crossing sell vs XLM when the SDEX book exists (slippage applies to the limit price),
-        optional <strong>Soroswap</strong> aggregated route (classic → native) when the API is configured with{" "}
-        <code className="inlineCode">SOROSWAP_BEARER_TOKEN</code>, or pay the full Horizon balance to a{" "}
-        <strong>user-confirmed</strong> destination (default: issuer) then <code className="inlineCode">ChangeTrust</code>{" "}
-        limit 0. Issuers may reject or claw back unsolicited returns — you must confirm. Cancel any open offers on the
-        asset first (offers block trustline removal). Sponsorship and issuer auth/clawback flags can still make operations
-        fail — read Horizon errors carefully.
-      </p>
+    <div className={embedded ? "trustlineEmbedded" : "card trustlineCard"}>
+      <div className="sectionHeaderRow trustlineSectionHeader">
+        <div>
+          <h2 className={embedded ? "trustlineEmbeddedTitle" : "cardTitle"}>
+            {embedded ? "Per-token cleanup planner" : "Trustlines and offers"}
+          </h2>
+          <p className="hint">
+            Review one token line at a time. Swap, return, or remove the balance, then close the trustline to release the
+            reserve attached to that line.
+          </p>
+        </div>
+      </div>
+      {offersBlocked ? (
+        <div className="trustlineNotice trustlineNotice--warn">
+          Open offers may need to be cancelled first. Offers can block trustline removal for the same asset.
+        </div>
+      ) : null}
       {!ready ? (
-        <p className="error">
-          Connect the source account wallet (same address as the field above) to sign trustline transactions.
-        </p>
+        <div className="trustlineNotice trustlineNotice--error">
+          Connect the source account wallet to run trustline actions and sign the selected cleanup step.
+        </div>
       ) : null}
       {loadErr ? <p className="error">{loadErr}</p> : null}
-      <div className="row">
-        <button type="button" className="btn secondary" disabled={walletBusy} onClick={() => void reload()}>
-          Refresh trustlines
-        </button>
-      </div>
       <ul className="trustlineList">
-        {positiveRows.map((r) => {
+        {allRows.map((r) => {
           const k = rowKey(r);
           const book = bookByKey[k] ?? { status: "idle" };
           const slip = slippageBpsByKey[k] ?? 100;
-          const canSell =
-            book.status === "ok" && !book.thin && book.bestPrice !== null && ready && !walletBusy;
+          const hasBalance = r.balanceNum > 1e-7;
+          const canSell = book.status === "ok" && !book.thin && book.bestPrice !== null && ready && !walletBusy;
           const canSoroswapSell = soroswapConfigured === true && ready && !walletBusy;
-          const sellLabel =
-            book.status === "loading"
-              ? "Checking SDEX…"
-              : book.status === "error"
-                ? "Book error"
-                : book.status === "ok" && book.thin
-                  ? "Not listed / too thin"
-                  : book.status === "ok"
-                    ? "Sell on SDEX (crossing, vs XLM)"
-                    : "Sell on SDEX (crossing, vs XLM)";
+          const mode = actionModeByKey[k] ?? (hasBalance ? "payout" : "remove");
           const hints = issuerHintsByKey[k] ?? [];
-          return (
-            <li key={k} className="trustlineItem">
-              <div className="trustlineHead">
-                <strong>
-                  {r.assetCode}:{r.assetIssuer.slice(0, 5)}…{r.assetIssuer.slice(-4)}
-                </strong>
-                <span className="meta">Balance {r.balance}</span>
-              </div>
-              {hints.length > 0 ? (
-                <ul className="issuerHints">
-                  {hints.map((h) => (
-                    <li key={h}>{h}</li>
-                  ))}
-                </ul>
-              ) : null}
-              {book.status === "error" ? <p className="meta">{book.message}</p> : null}
-              <div className="trustlineActions">
-                <label className="slipLabel">
-                  Slippage (bps)
-                  <input
-                    className="input slipInput"
-                    type="number"
-                    min={0}
-                    max={5000}
-                    step={10}
-                    value={slip}
-                    onChange={(e) =>
-                      setSlippageBpsByKey((prev) => ({
-                        ...prev,
-                        [k]: Math.max(0, Math.min(5000, Number(e.target.value) || 0)),
-                      }))
-                    }
-                  />
-                </label>
-                <button type="button" className="btn secondary" disabled={!canSell} title={sellLabel} onClick={() => void onSell(r)}>
-                  {sellLabel}
-                </button>
-                <button
-                  type="button"
-                  className="btn secondary"
-                  disabled={!canSoroswapSell}
-                  title={
-                    soroswapConfigured === false
-                      ? "API needs SOROSWAP_BEARER_TOKEN — or use SDEX / payout flows"
-                      : "Best-route swap to native via Soroswap (sign in wallet)"
+          const actionOptions: Array<{ value: TrustlineActionMode; label: string; disabled?: boolean }> = hasBalance
+            ? [
+                {
+                  value: "sdex",
+                  label:
+                    book.status === "loading"
+                      ? "SDEX swap · checking liquidity"
+                      : book.status === "error"
+                        ? "SDEX swap · unavailable"
+                        : book.status === "ok" && book.thin
+                          ? "SDEX swap · book too thin"
+                          : "SDEX swap to XLM",
+                  disabled: !(book.status === "ok" && !book.thin && book.bestPrice),
+                },
+                {
+                  value: "soroswap",
+                  label: soroswapConfigured ? "Soroswap route" : "Soroswap route · unavailable",
+                  disabled: soroswapConfigured !== true,
+                },
+                { value: "payout", label: "Send full token balance" },
+              ]
+            : [{ value: "remove", label: "Remove empty trustline" }];
+
+          const primaryAction =
+            mode === "sdex"
+              ? { label: "Swap on SDEX", disabled: !canSell, run: () => void onSell(r) }
+              : mode === "soroswap"
+                ? {
+                    label: soroswapConfigured ? "Swap via Soroswap" : "Soroswap unavailable",
+                    disabled: !canSoroswapSell,
+                    run: () => void onSoroswapSell(r),
                   }
-                  onClick={() => void onSoroswapSell(r)}
-                >
-                  {soroswapConfigured === null ? "Soroswap…" : soroswapConfigured ? "Sell via Soroswap (route)" : "Soroswap (not configured)"}
-                </button>
-              </div>
-              <div className="payoutBlock">
-                <label className="label">Payout target (full balance payment)</label>
-                <input
-                  className="input"
-                  spellCheck={false}
-                  value={payoutByKey[k] ?? r.assetIssuer}
-                  onChange={(e) => setPayoutByKey((prev) => ({ ...prev, [k]: e.target.value }))}
-                />
-                <label className="confirmRow">
-                  <input
-                    type="checkbox"
-                    checked={Boolean(confirmPayoutByKey[k])}
-                    onChange={(e) => setConfirmPayoutByKey((prev) => ({ ...prev, [k]: e.target.checked }))}
-                  />{" "}
-                  I confirm I may be sending an unsolicited return; the destination may reject, freeze, or claw back per
-                  network rules and issuer policy.
-                </label>
-                <button
-                  type="button"
-                  className="btn secondary"
-                  disabled={!ready || walletBusy}
-                  onClick={() => void onPayIssuerAndRemove(r)}
-                >
-                  Send remainder + remove line (sign)
-                </button>
-              </div>
-            </li>
-          );
-        })}
-        {zeroRows.map((r) => {
-          const k = rowKey(r);
+                : mode === "payout"
+                  ? {
+                      label: "Send token + remove trustline",
+                      disabled: !ready || walletBusy,
+                      run: () => void onPayIssuerAndRemove(r),
+                    }
+                  : {
+                      label: "Remove trustline",
+                      disabled: !ready || walletBusy,
+                      run: () => void onRemoveZeroOnly(r),
+                    };
+
           return (
-            <li key={k} className="trustlineItem">
-              <div className="trustlineHead">
-                <strong>
-                  {r.assetCode}:{r.assetIssuer.slice(0, 5)}…{r.assetIssuer.slice(-4)}
-                </strong>
-                <span className="meta">Zero balance — remove trustline only</span>
-              </div>
-              <button
-                type="button"
-                className="btn secondary"
-                disabled={!ready || walletBusy}
-                onClick={() => void onRemoveZeroOnly(r)}
-              >
-                Remove line (ChangeTrust 0)
-              </button>
+            <li key={k} className="trustlineTokenShell">
+              <details className="trustlineToken">
+                <summary className="trustlineTokenSummary">
+                  <div className="trustlineTokenIdentity">
+                    <strong>{r.assetCode}</strong>
+                    <span>{issuerLabel(r.assetIssuer)}</span>
+                  </div>
+                  <div className="trustlineTokenMeta">
+                    <span className={`statusBadge ${hasBalance ? "statusBadge--warn" : "statusBadge--ok"}`}>
+                      {hasBalance ? "Balance to unwind" : "Ready to remove"}
+                    </span>
+                    <span className="trustlineReserveHint">Reserve unlocks after line removal</span>
+                  </div>
+                  <div className="trustlineTokenBalance">
+                    <span>Balance</span>
+                    <strong>{r.balance}</strong>
+                  </div>
+                  <span className="stateDetailGroupMeta">
+                    <span>{hasBalance ? actionOptions.filter((option) => !option.disabled).length : 1} action{hasBalance && actionOptions.filter((option) => !option.disabled).length !== 1 ? "s" : ""}</span>
+                    <span className="stateDetailGroupChevron" aria-hidden>
+                      ⌄
+                    </span>
+                  </span>
+                </summary>
+
+                <div className="trustlineTokenBody">
+                  <div className="trustlineFacts">
+                    <div className="trustlineFact">
+                      <span>Token line</span>
+                      <strong>{r.assetCode}</strong>
+                    </div>
+                    <div className="trustlineFact">
+                      <span>Issuer</span>
+                      <strong>{issuerLabel(r.assetIssuer)}</strong>
+                    </div>
+                    <div className="trustlineFact">
+                      <span>Trustline state</span>
+                      <strong>{hasBalance ? "Funded" : "Empty"}</strong>
+                    </div>
+                    <div className="trustlineFact">
+                      <span>Reserve impact</span>
+                      <strong>Released after close</strong>
+                    </div>
+                  </div>
+
+                  {hints.length > 0 ? (
+                    <ul className="issuerHints">
+                      {hints.map((h) => (
+                        <li key={h}>{h}</li>
+                      ))}
+                    </ul>
+                  ) : null}
+
+                  <div className="trustlinePlanner">
+                    <label className="label trustlinePlannerLabel">Choose cleanup action</label>
+                    <div className="trustlinePlannerControls">
+                      <label className="networkSelectWrap trustlineActionSelectWrap">
+                        <select
+                          className="networkSelect trustlineActionSelect"
+                          value={mode}
+                          onChange={(event) =>
+                            setActionModeByKey((prev) => ({
+                              ...prev,
+                              [k]: event.target.value as TrustlineActionMode,
+                            }))
+                          }
+                        >
+                          {actionOptions.map((option) => (
+                            <option key={option.value} value={option.value} disabled={option.disabled}>
+                              {option.label}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+
+                      {(mode === "sdex" || mode === "soroswap") && hasBalance ? (
+                        <label className="slipLabel">
+                          Slippage (bps)
+                          <input
+                            className="input slipInput"
+                            type="number"
+                            min={0}
+                            max={5000}
+                            step={10}
+                            value={slip}
+                            onChange={(e) =>
+                              setSlippageBpsByKey((prev) => ({
+                                ...prev,
+                                [k]: Math.max(0, Math.min(5000, Number(e.target.value) || 0)),
+                              }))
+                            }
+                          />
+                        </label>
+                      ) : null}
+                    </div>
+
+                    <div className="trustlinePlannerHint">
+                      {mode === "sdex"
+                        ? book.status === "loading"
+                          ? "Checking whether the SDEX book is deep enough for this token line."
+                          : book.status === "error"
+                            ? book.message
+                            : book.status === "ok" && book.thin
+                              ? "The current SDEX book is too thin for a clean exit. Try another route."
+                              : "Use the SDEX book to convert this token into XLM before removing the trustline."
+                        : mode === "soroswap"
+                          ? soroswapConfigured
+                            ? "Route through Soroswap when on-chain liquidity is available for a classic to native exit."
+                            : "Soroswap routing is not configured in this environment."
+                          : mode === "payout"
+                            ? "Send the full token balance to a confirmed destination, then remove the trustline in the same signed step."
+                            : "This line is already empty and can be removed directly."}
+                    </div>
+
+                    {mode === "payout" && hasBalance ? (
+                      <div className="payoutBlock">
+                        <label className="label">Payout target (full token balance)</label>
+                        <input
+                          className="input"
+                          spellCheck={false}
+                          value={payoutByKey[k] ?? r.assetIssuer}
+                          onChange={(e) => setPayoutByKey((prev) => ({ ...prev, [k]: e.target.value }))}
+                        />
+                        <label className="confirmRow">
+                          <input
+                            type="checkbox"
+                            checked={Boolean(confirmPayoutByKey[k])}
+                            onChange={(e) => setConfirmPayoutByKey((prev) => ({ ...prev, [k]: e.target.checked }))}
+                          />{" "}
+                          I confirm this token return may be unsolicited and the destination may reject, freeze, or claw
+                          back the asset under issuer policy.
+                        </label>
+                      </div>
+                    ) : null}
+
+                    <div className="trustlinePlannerFooter">
+                      <button
+                        type="button"
+                        className={primaryAction.disabled ? "btn ghost" : "btn secondary"}
+                        disabled={primaryAction.disabled}
+                        onClick={primaryAction.run}
+                      >
+                        {primaryAction.label}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </details>
             </li>
           );
         })}
