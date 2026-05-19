@@ -85,7 +85,7 @@ const safetyCards = [
   },
   {
     title: "Private keys stay private",
-    body: "Secret keys and signing authority never move to Stellar Sweep servers.",
+    body: "Secret keys and signing authority never move to Orbitway servers.",
   },
   {
     title: "Close only when ready",
@@ -285,7 +285,7 @@ function LandingPage() {
   const [menuOpen, setMenuOpen] = useState(false);
 
   useEffect(() => {
-    document.title = "Stellar Sweep";
+    document.title = "Orbitway";
   }, []);
 
   const startScan = (rawAddress: string) => {
@@ -298,9 +298,9 @@ function LandingPage() {
     <div className="page">
       <header className={`topbar topbar--landing${scrolled ? " topbar--scrolled" : ""}`}>
         <div className="brand">
-          <span className="brandMark" aria-hidden />
+          <img className="brandMark" src="/orbitway-logo.png" alt="" />
           <div>
-            <div className="brandName">Stellar Sweep</div>
+            <div className="brandName">Orbitway</div>
             <div className="brandTag">Account health for Stellar</div>
           </div>
         </div>
@@ -388,7 +388,7 @@ function LandingPage() {
             <SectionKicker>How it works</SectionKicker>
             <h2>Safely scan, clean, and close your account.</h2>
             <p>
-              Stellar Sweep separates account inspection, cleanup, and final account closure so users never jump
+              Orbitway separates account inspection, cleanup, and final account closure so users never jump
               straight into irreversible actions.
             </p>
           </div>
@@ -433,7 +433,7 @@ function LandingPage() {
               and irreversible mistakes.
             </h2>
             <p>
-              Stellar Sweep separates scanning, cleanup, and account closure so users can inspect first, approve actions
+              Orbitway separates scanning, cleanup, and account closure so users can inspect first, approve actions
               through their wallet, and avoid unsafe exits.
             </p>
             <div className="safetyPoints">
@@ -452,7 +452,7 @@ function LandingPage() {
             <SectionKicker>Coverage</SectionKicker>
             <h2>Everything that can block a clean exit.</h2>
             <p>
-              From trustlines and offers to allowances, reserves, and DeFi positions, Stellar Sweep helps surface the
+              From trustlines and offers to allowances, reserves, and DeFi positions, Orbitway helps surface the
               account state users need to review before cleanup.
             </p>
           </div>
@@ -476,7 +476,7 @@ function LandingPage() {
             <SectionKicker>Use cases</SectionKicker>
             <h2>One cleanup layer. Multiple ecosystem use cases.</h2>
             <p>
-              From individual account health checks to wallet support flows, Stellar Sweep makes hidden account state
+              From individual account health checks to wallet support flows, Orbitway makes hidden account state
               easier to inspect and resolve.
             </p>
           </div>
@@ -496,7 +496,7 @@ function LandingPage() {
             <SectionKicker>Ecosystem infrastructure</SectionKicker>
             <h2>Account cleanup logic teams do not need to rebuild.</h2>
             <p>
-              Wallets, exchanges, explorers, and support teams can integrate Stellar Sweep&apos;s account-state
+              Wallets, exchanges, explorers, and support teams can integrate Orbitway&apos;s account-state
               visibility and cleanup guidance instead of building custom flows from scratch.
             </p>
             <NavLink href="#docs">Built to integrate</NavLink>
@@ -545,7 +545,7 @@ function LandingPage() {
         <footer className="footer">
           <div className="footerGrid">
             <div className="footerBrand">
-              <div className="footerBrandName">Stellar Sweep</div>
+              <div className="footerBrandName">Orbitway</div>
               <p>A non-custodial account health and cleanup tool for Stellar.</p>
             </div>
 
@@ -580,8 +580,8 @@ function LandingPage() {
             </div>
           </div>
 
-          <div className="footerLegal">Stellar Sweep is non-custodial. Users review and approve cleanup actions through their own wallets.</div>
-          <div className="footerBottom">© 2026 Stellar Sweep. Account health and cleanup infrastructure for Stellar.</div>
+          <div className="footerLegal">Orbitway is non-custodial. Users review and approve cleanup actions through their own wallets.</div>
+          <div className="footerBottom">© 2026 Orbitway. Account health and cleanup infrastructure for Stellar.</div>
         </footer>
       </main>
     </div>
@@ -1071,7 +1071,7 @@ function AppShell() {
   }, [network]);
 
   useEffect(() => {
-    document.title = "Stellar Sweep | App";
+    document.title = "Orbitway | App";
   }, []);
 
   useEffect(() => {
@@ -1347,9 +1347,9 @@ function AppShell() {
           <aside className="consoleSidebar">
             <div className="consoleSidebarTop">
               <div className="brand">
-                <span className="brandMark" aria-hidden />
+                <img className="brandMark" src="/orbitway-logo.png" alt="" />
                 <div>
-                  <div className="brandName">Stellar Sweep</div>
+                  <div className="brandName">Orbitway</div>
                   <div className="brandTag">Account cleanup console</div>
                 </div>
               </div>
@@ -1473,7 +1473,7 @@ function AppShell() {
                     <article className="card consolePrimaryCard scanInfoCard">
                       <h2 className="cardTitle">Non-custodial by design</h2>
                       <p className="hint">
-                        Stellar Sweep never needs your private key to scan. Actions are reviewed separately and signed
+                        Orbitway never needs your private key to scan. Actions are reviewed separately and signed
                         through your wallet.
                       </p>
                     </article>
@@ -1593,7 +1593,7 @@ function AppShell() {
                     <article className="card consolePrimaryCard scanInfoCard">
                       <h2 className="cardTitle">Non-custodial by design</h2>
                       <p className="hint">
-                        Stellar Sweep never needs your private key to scan. Actions are reviewed separately and signed
+                        Orbitway never needs your private key to scan. Actions are reviewed separately and signed
                         through your wallet.
                       </p>
                     </article>

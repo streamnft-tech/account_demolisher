@@ -1,4 +1,4 @@
-# Account Demolisher — Use cases, components, and external services
+# Orbitway — Use cases, components, and external services
 
 **Repo:** `/Users/piyush/Desktop/work/stellar`  
 **Reference prior art:** [stellar.expert/demolisher/public](https://stellar.expert/demolisher/public) (Orbit Lens — classic-focused flow; use as UX/operation ordering reference, verify license before copying code).  
@@ -243,7 +243,7 @@ Split endpoints return slices that can be merged client-side (see `apps/web/src/
 ```
 stellar/
 ├── docs/
-│   ├── ACCOUNT_DEMOLISHER_USECASES_AND_COMPONENTS.md   # this file
+│   ├── ORBITWAY_USECASES_AND_COMPONENTS.md   # this file
 │   └── ARCHITECTURE_DIAGRAMS.md                       # Mermaid: components + health sequence
 ├── apps/
 │   └── web/                    # @stellar/web — Vite + React + TS
@@ -298,7 +298,7 @@ Values below match **`services/api/README.md`**. The API reads them from the **p
 - [ARCHITECTURE_DIAGRAMS.md](./ARCHITECTURE_DIAGRAMS.md) — component and sequence diagrams  
 - [services/api/README.md](../services/api/README.md) — routes and env  
 - [stellar.expert/demolisher/public](https://stellar.expert/demolisher/public)  
-- [Account Demolisher RFP](https://stellar.gitbook.io/scf-handbook/scf-awards/build-award/rfp-track#account-demolisher)  
+- [Orbitway product requirements (SCF Account Demolisher RFP)](https://stellar.gitbook.io/scf-handbook/scf-awards/build-award/rfp-track#account-demolisher)  
 - [Horizon API](https://developers.stellar.org/docs/data/horizon) · [Horizon resource reference](https://developers.stellar.org/docs/data/apis/horizon/api-reference/resources)  
 - [Soroban RPC](https://developers.stellar.org/docs/data/rpc)  
 - [stellar-wallets-kit](https://github.com/stellar/stellar-wallets-kit)  
