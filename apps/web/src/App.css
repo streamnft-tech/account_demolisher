@@ -3138,10 +3138,37 @@ code {
 
   .consoleShell {
     grid-template-columns: 1fr;
+    gap: 1rem;
   }
 
   .consoleSidebar {
     position: static;
+    min-height: auto;
+    grid-template-rows: auto auto;
+    gap: 0.8rem;
+    padding: 0.85rem;
+  }
+
+  .sidebarNav {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 0.4rem;
+    padding: 0.35rem;
+    background: rgba(5, 11, 20, 0.52);
+  }
+
+  .sidebarNavButton,
+  .sidebarNavButton:first-child,
+  .sidebarNavButton:last-child {
+    min-height: 4.25rem;
+    padding: 0.72rem 0.78rem;
+    border-radius: 10px;
+    border-bottom-color: transparent;
+  }
+
+  .sidebarNavButton--active {
+    box-shadow:
+      inset 0 0 0 1px rgba(79, 140, 255, 0.18),
+      inset 3px 0 0 rgba(34, 211, 238, 0.72);
   }
 
   .scanWorkspace {
@@ -3187,6 +3214,10 @@ code {
     justify-self: stretch;
   }
 
+  .pageIntro {
+    padding-top: 0.5rem;
+  }
+
   .trustlineTokenSummary {
     grid-template-columns: 1fr;
     justify-items: start;
@@ -3205,7 +3236,7 @@ code {
 @media (max-width: 720px) {
   .landing,
   .workspace {
-    width: min(100% - 1rem, 1200px);
+    width: min(100% - 0.75rem, 1200px);
   }
 
   .topbar {
@@ -3236,7 +3267,7 @@ code {
   }
 
   .heroCopy h1 {
-    font-size: 2.9rem;
+    font-size: 2.7rem;
     line-height: 1.04;
   }
 
@@ -3297,6 +3328,15 @@ code {
     padding: 4rem 1rem;
   }
 
+  .infoGrid--landing,
+  .coverageSection,
+  .stepsSection,
+  .safetySection,
+  .useCasesSection,
+  .ecosystemSection {
+    padding: 4rem 1rem;
+  }
+
   .ledgerScene {
     min-height: 24rem;
   }
@@ -3315,8 +3355,17 @@ code {
     display: none;
   }
 
+  .brand {
+    gap: 0.75rem;
+  }
+
+  .brandMark {
+    width: 2.2rem;
+    height: 2.2rem;
+  }
+
   .consoleShell {
-    gap: 1rem;
+    gap: 0.8rem;
   }
 
   .consoleTopbar,
@@ -3326,7 +3375,9 @@ code {
 
   .consoleTopbar {
     justify-content: flex-end;
-    gap: 0.85rem;
+    gap: 0.55rem;
+    padding: 0.55rem;
+    border-radius: 14px;
   }
 
   .topbarNetworkControl {
@@ -3335,14 +3386,58 @@ code {
     margin-right: 0;
   }
 
+  .topbarNetworkControl span {
+    display: none;
+  }
+
+  .networkSelect {
+    min-width: 6.35rem;
+    height: 2.2rem;
+  }
+
   .consoleSidebar,
   .card {
     padding: 1rem;
+    border-radius: 14px;
+  }
+
+  .consoleSidebar {
+    padding: 0.75rem;
+    gap: 0.7rem;
+  }
+
+  .sidebarNav {
+    display: flex;
+    overflow-x: auto;
+    gap: 0.45rem;
+    padding: 0.25rem;
+    scroll-snap-type: x proximity;
+    scrollbar-width: none;
+  }
+
+  .sidebarNav::-webkit-scrollbar {
+    display: none;
+  }
+
+  .sidebarNavButton,
+  .sidebarNavButton:first-child,
+  .sidebarNavButton:last-child {
+    min-width: 9.35rem;
+    min-height: auto;
+    padding: 0.72rem 0.78rem;
+    border-radius: 10px;
+    scroll-snap-align: start;
+  }
+
+  .page--app .workspace {
+    width: calc(100% - 0.75rem);
+    padding-top: 0.9rem;
+    padding-bottom: 2rem;
   }
 
   .pageIntro h1 {
-    font-size: 2.1rem;
-    line-height: 1.06;
+    font-size: clamp(1.95rem, 10vw, 2.35rem);
+    line-height: 1.03;
   }
 
   .sectionActions {
@@ -3356,7 +3451,7 @@ code {
   }
 
   .summaryGrid {
-    grid-template-columns: 1fr;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .stateDetailRow,
@@ -3367,5 +3462,160 @@ code {
   .stateValue {
     width: fit-content;
     white-space: normal;
+  }
+
+  .pageHeader {
+    gap: 0.9rem;
+    padding-bottom: 0.75rem;
+  }
+
+  .pageHeaderStatus {
+    padding: 0.8rem 0.9rem;
+  }
+
+  .scanFormCard {
+    padding: 1rem;
+    gap: 0.9rem;
+  }
+
+  .scanFormCard .cardTitle {
+    font-size: 1.2rem;
+  }
+
+  .input {
+    min-height: 50px;
+    padding: 0.82rem 0.88rem;
+    border-radius: 12px;
+    font-size: 0.92rem;
+  }
+
+  .btn.primary.scanSubmit {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .scanInfoCard {
+    padding: 1rem;
+  }
+
+  .scanCheckList li {
+    font-size: 0.82rem;
+  }
+
+  .stateDetailGroupSummary {
+    grid-template-columns: 1fr;
+    gap: 0.6rem;
+    align-items: start;
+    padding: 0.9rem;
+  }
+
+  .stateDetailGroupMeta {
+    justify-self: start;
+    gap: 0.55rem;
+  }
+
+  .stateDetailRows {
+    padding: 0 0.75rem 0.85rem;
+  }
+
+  .scanReportRow summary {
+    padding: 0.78rem;
+  }
+
+  .scanReportDetails {
+    padding: 0 0.78rem 0.78rem;
+  }
+
+  .trustlineEmbedded {
+    gap: 0.75rem;
+  }
+
+  .trustlineTokenSummary {
+    padding: 0.88rem;
+    gap: 0.7rem;
+  }
+
+  .trustlineTokenBody {
+    padding: 0 0.88rem 0.88rem;
+  }
+
+  .trustlineFacts {
+    grid-template-columns: 1fr;
+    gap: 0.6rem;
+  }
+
+  .trustlinePlanner {
+    padding: 0.85rem;
+  }
+
+  .trustlinePlannerControls {
+    display: grid;
+    grid-template-columns: 1fr;
+    align-items: stretch;
+  }
+
+  .trustlineActionSelectWrap,
+  .slipInput {
+    min-width: 0;
+    max-width: none;
+  }
+
+  .trustlineActions {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .technicalDetails summary {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}
+
+@media (max-width: 560px) {
+  .heroCopy h1 {
+    font-size: 2.45rem;
+  }
+
+  .contentCard h2,
+  .sectionHeading h2,
+  .finalCta h2,
+  .workspaceHero h1 {
+    font-size: 1.9rem;
+  }
+
+  .brandName {
+    font-size: 0.94rem;
+  }
+
+  .sidebarNavButton {
+    min-width: 8.6rem;
+  }
+
+  .sidebarNavMeta {
+    display: none;
+  }
+
+  .summaryGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .pageHeaderStatus strong {
+    font-size: 0.92rem;
+  }
+
+  .stateDetailGroupMeta {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .scanReportAction {
+    width: 100%;
+  }
+
+  .scanReportAction.btn,
+  .sectionActions .btn,
+  .trustlineActions .btn {
+    width: 100%;
+    justify-content: center;
   }
 }
