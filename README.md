@@ -1,4 +1,4 @@
-# Stellar — Account Demolisher monorepo
+# Orbitway monorepo
 
 **npm workspaces**: **web** (Vite + React + TS), **API** (Fastify + TS), **core** (shared types/logic).
 
@@ -52,13 +52,13 @@ stellar/
 
 ## Docs
 
-- [Use cases & components](docs/ACCOUNT_DEMOLISHER_USECASES_AND_COMPONENTS.md) — includes **§5.4 Trustline removal policy** (sell vs snapshot book, payout + `ChangeTrust`, sponsorship / flags).
+- [Use cases & components](docs/ORBITWAY_USECASES_AND_COMPONENTS.md) — includes **§5.4 Trustline removal policy** (sell vs snapshot book, payout + `ChangeTrust`, sponsorship / flags).
 
 ---
 
 ## Production requirements (status)
 
-This section tracks **Account Demolisher** scope against the full production spec so work can be resumed without re-deriving gaps. Last reviewed from the codebase **2026-05-15** (not a legal/compliance sign-off).
+This section tracks **Orbitway** scope against the full production spec so work can be resumed without re-deriving gaps. Last reviewed from the codebase **2026-05-15** (not a legal/compliance sign-off).
 
 ### Implemented (today)
 
@@ -68,7 +68,7 @@ This section tracks **Account Demolisher** scope against the full production spe
 | **End classic sponsorship (RevokeSponsorship)** | **Partial** | `apps/web/src/sponsorshipRevoke.ts` + Step 3 when blocking `SPONSORING_OTHER_ACCOUNTS`: paginates Horizon (`claimable_balances`, `offers`, `liquidity_pools`, `accounts` with `?sponsor=`), builds up to **100** revoke ops per transaction, signs with Wallets Kit, submits. **Gaps:** sponsored **data** entries are not reliably listed with sponsor in account JSON; more than 100 revokes requires multiple runs. |
 | **Remove extra signers / merge-friendly thresholds** | **Partial** | `apps/web/src/classicDemolish.ts` (`buildMergeFriendlySignersAndThresholdsBatchXdr`) + Step 3 for `MULTISIG_OR_EXTRA_SIGNERS` / `NON_DEFAULT_THRESHOLDS`: phase A removes up to 100 extra **ed25519** signers per tx; phase B sets `masterWeight: 1`, `lowThreshold: 1`, `medThreshold: 0`, `highThreshold: 0`. Step 3 tooltips describe the phased flow. **Gap:** non-ed25519 signer types (see gaps table). |
 | **Classic trustlines (zero balance only, batch)** | **Partial** | `classicDemolish.ts` + Step 3 for `TRUSTLINES_OR_ASSET_BALANCES`: `ChangeTrust` limit 0 for up to **100** empty lines per tx when **all** qualifying lines are zero (throws if any balance is positive). |
-| **Classic trustlines (non-zero balance)** | **Partial** | `TrustlineTeardownCard` + `trustlineTeardown.ts` (when trustlines block): optional **crossing `ManageSellOffer` vs XLM** from `GET /api/order-book` + slippage bps; optional **Soroswap** classic→native route when the API has **`SOROSWAP_BEARER_TOKEN`** (`POST /api/soroswap/swap-xdr`, `services/api/src/soroswapClient.ts`); **Payment** + **`ChangeTrust` 0** to a **user-confirmed** payout G-address (default issuer); issuer flag hints. **Gaps:** thin SDEX book and no Soroswap JWT still mean no automated exit; Soroswap may return **Soroban** XDR (submit path is still Horizon `submitTransaction` — failures need manual/Lab follow-up); no generic classic path-payment router. Policy: [docs/ACCOUNT_DEMOLISHER_USECASES_AND_COMPONENTS.md §5.4](docs/ACCOUNT_DEMOLISHER_USECASES_AND_COMPONENTS.md). |
+| **Classic trustlines (non-zero balance)** | **Partial** | `TrustlineTeardownCard` + `trustlineTeardown.ts` (when trustlines block): optional **crossing `ManageSellOffer` vs XLM** from `GET /api/order-book` + slippage bps; optional **Soroswap** classic→native route when the API has **`SOROSWAP_BEARER_TOKEN`** (`POST /api/soroswap/swap-xdr`, `services/api/src/soroswapClient.ts`); **Payment** + **`ChangeTrust` 0** to a **user-confirmed** payout G-address (default issuer); issuer flag hints. **Gaps:** thin SDEX book and no Soroswap JWT still mean no automated exit; Soroswap may return **Soroban** XDR (submit path is still Horizon `submitTransaction` — failures need manual/Lab follow-up); no generic classic path-payment router. Policy: [docs/ORBITWAY_USECASES_AND_COMPONENTS.md §5.4](docs/ORBITWAY_USECASES_AND_COMPONENTS.md). |
 | **Remove account `data` entries** | **Partial** | `ManageData` with `value: null` for up to 100 keys per tx; multiple runs if needed. |
 | **Cancel open SDEX offers** | **Partial** | `GET /api/account/:id/offers` + `buildCancelSdexOffersXdr` (`classicClose.ts`); Step 3 when `OPEN_OFFERS`. More than 100 offers requires multiple runs. |
 | **Withdraw AMM / liquidity pool shares** | **Partial** | Uses `health.openPositions.liquidityPoolShares` or fresh Horizon balances; `liquidityPoolWithdraw` with **min amounts 0** (high slippage — user must confirm in wallet). Step 3 when `OPEN_LIQUIDITY_POOL`. |

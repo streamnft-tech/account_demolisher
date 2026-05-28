@@ -1,49 +1,82 @@
-import { StellarWalletsKit } from "@creit.tech/stellar-wallets-kit/sdk";
-import { AlbedoModule } from "@creit.tech/stellar-wallets-kit/modules/albedo";
-import { FreighterModule } from "@creit.tech/stellar-wallets-kit/modules/freighter";
-import { LobstrModule } from "@creit.tech/stellar-wallets-kit/modules/lobstr";
-import { xBullModule } from "@creit.tech/stellar-wallets-kit/modules/xbull";
-import { Networks } from "@creit.tech/stellar-wallets-kit/types";
+import { Networks, StellarWalletsKit } from "@creit.tech/stellar-wallets-kit";
+import {
+  WalletConnectModule,
+  type TWalletConnectModuleParams,
+  WalletConnectTargetChain,
+} from "@creit.tech/stellar-wallets-kit/modules/wallet-connect";
+import { defaultModules } from "@creit.tech/stellar-wallets-kit/modules/utils";
+import type { ModuleInterface } from "@creit.tech/stellar-wallets-kit/types";
 
 import type { UiNetwork } from "./network.js";
 
-let initialized = false;
+let activeNetwork: UiNetwork | null = null;
 
 function kitNetwork(ui: UiNetwork): Networks {
   return ui === "mainnet" ? Networks.PUBLIC : Networks.TESTNET;
 }
 
-/**
- * Configure Stellar Wallets Kit (Freighter, Albedo, xBull, LOBSTR, optional WalletConnect for mobile wallets).
- * WalletConnect is loaded only when `VITE_WALLETCONNECT_PROJECT_ID` is set (smaller default bundle).
- */
-export async function ensureWalletKit(uiNetwork: UiNetwork): Promise<void> {
-  const n = kitNetwork(uiNetwork);
-  if (initialized) {
-    StellarWalletsKit.setNetwork(n);
-    return;
-  }
-  const modules = [new FreighterModule(), new AlbedoModule(), new xBullModule(), new LobstrModule()];
+async function buildModules(uiNetwork: UiNetwork): Promise<ModuleInterface[]> {
+  const modules: ModuleInterface[] = [...defaultModules()];
   const wc = import.meta.env.VITE_WALLETCONNECT_PROJECT_ID?.trim();
   if (wc) {
-    const { WalletConnectModule } = await import("@creit.tech/stellar-wallets-kit/modules/wallet-connect");
+    const metadata: TWalletConnectModuleParams["metadata"] = {
+      name: "Account Demolisher",
+      description: "Sign classic Stellar transactions to close offers and LP before account merge.",
+      url: typeof window !== "undefined" ? window.location.origin : "http://localhost",
+      icons: [],
+    };
     modules.push(
       new WalletConnectModule({
         projectId: wc,
-        metadata: {
-          name: "Account Demolisher",
-          description: "Sign classic Stellar transactions to close offers and LP before account merge.",
-          url: typeof window !== "undefined" ? window.location.origin : "http://localhost",
-          icons: [],
-        },
+        metadata,
+        allowedChains: [uiNetwork === "mainnet" ? WalletConnectTargetChain.PUBLIC : WalletConnectTargetChain.TESTNET],
       }),
     );
   }
+  return modules;
+}
+
+/** Ensures the wallets kit is initialized for the given UI network (modules + passphrase context). */
+export async function ensureWalletKit(uiNetwork: UiNetwork): Promise<void> {
+  if (activeNetwork === uiNetwork) return;
+  const modules = await buildModules(uiNetwork);
   StellarWalletsKit.init({
-    network: n,
     modules,
+    network: kitNetwork(uiNetwork),
   });
-  initialized = true;
+  activeNetwork = uiNetwork;
+}
+
+export async function connectWallet(uiNetwork: UiNetwork): Promise<{ address: string }> {
+  await ensureWalletKit(uiNetwork);
+  return StellarWalletsKit.authModal();
+}
+
+export async function disconnectWallet(uiNetwork: UiNetwork): Promise<void> {
+  try {
+    await ensureWalletKit(uiNetwork);
+    await StellarWalletsKit.disconnect();
+  } finally {
+    activeNetwork = null;
+  }
+}
+
+export async function openWalletProfile(uiNetwork: UiNetwork): Promise<void> {
+  await ensureWalletKit(uiNetwork);
+  await StellarWalletsKit.profileModal();
+}
+
+export async function signWithWallet(
+  uiNetwork: UiNetwork,
+  xdr: string,
+  opts?: { networkPassphrase?: string; address?: string; path?: string; submit?: boolean; submitUrl?: string },
+) {
+  await ensureWalletKit(uiNetwork);
+  return StellarWalletsKit.signTransaction(xdr, {
+    networkPassphrase: opts?.networkPassphrase,
+    address: opts?.address,
+    path: opts?.path,
+  });
 }
 
 /** Human-readable message for kit / modal errors (`{ code, message }` or `Error`). */

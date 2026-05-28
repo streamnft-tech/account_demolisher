@@ -1,6 +1,6 @@
-# Account Demolisher — architecture diagrams
+# Orbitway — architecture diagrams
 
-Diagrams reflect the **monorepo layout** ([README.md](../README.md)), **API** ([services/api/README.md](../services/api/README.md)), **product scope** ([ACCOUNT_DEMOLISHER_USECASES_AND_COMPONENTS.md](./ACCOUNT_DEMOLISHER_USECASES_AND_COMPONENTS.md)), and **current code** in `apps/web`, `services/api`, and `packages/core`.
+Diagrams reflect the **monorepo layout** ([README.md](../README.md)), **API** ([services/api/README.md](../services/api/README.md)), **product scope** ([ORBITWAY_USECASES_AND_COMPONENTS.md](./ORBITWAY_USECASES_AND_COMPONENTS.md)), and **current code** in `apps/web`, `services/api`, and `packages/core`.
 
 **Note:** The root README “production requirements” table may lag the codebase (e.g. DeFi: `scanDefiProtocols` runs on `GET .../health`). These diagrams follow the **implemented** health path unless labeled as planned.
 
@@ -18,7 +18,7 @@ flowchart TB
 
   subgraph DevHost["Developer machine"]
     subgraph Web["@stellar/web — Vite SPA :5173"]
-      UI[App.tsx — checklist, destination, Demolish placeholder]
+      UI[App.tsx — checklist, destination, Orbitway workspace]
       WK[Stellar Wallets Kit — connect / profile / sign hook]
       CoreC["@stellar/core — types, isValidClassicAddress"]
     end
@@ -121,7 +121,6 @@ sequenceDiagram
   end
 
   User->>Browser: Optionally enter destination, read "Demolish" copy
-  Note over User,Browser: README: no ACCOUNT_MERGE; wallet can connect for future signed steps — no automated teardown txs yet
 ```
 
 ### Other API routes (not shown in the sequence above)
