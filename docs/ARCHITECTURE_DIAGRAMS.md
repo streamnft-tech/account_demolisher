@@ -121,7 +121,6 @@ sequenceDiagram
   end
 
   User->>Browser: Optionally enter destination, read "Demolish" copy
-  Note over User,Browser: README: no ACCOUNT_MERGE; wallet can connect for future signed steps — no automated teardown txs yet
 ```
 
 ### Other API routes (not shown in the sequence above)
