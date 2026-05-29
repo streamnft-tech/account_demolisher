@@ -1480,15 +1480,17 @@
   grid-template-rows: auto auto 1fr;
   gap: 0.95rem;
   min-height: calc(100dvh - 3.1rem);
-  padding: 1rem;
-  border-radius: 12px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-right-color: rgba(255, 255, 255, 0.13);
-  background: rgba(255, 255, 255, 0.035);
+  padding: 0.95rem;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-right-color: rgba(255, 255, 255, 0.11);
+  background:
+    linear-gradient(180deg, rgba(8, 14, 24, 0.95), rgba(7, 12, 22, 0.92)),
+    rgba(255, 255, 255, 0.02);
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.04),
-    18px 0 56px rgba(2, 6, 23, 0.18);
-  backdrop-filter: blur(16px);
+    inset 0 1px 0 rgba(255, 255, 255, 0.03),
+    20px 0 40px rgba(2, 6, 23, 0.12);
+  backdrop-filter: blur(12px);
 }
 
 .consoleSidebarTop {
@@ -1616,15 +1618,17 @@
   display: flex;
   align-items: center;
   justify-content: flex-end;
-  min-height: 3.1rem;
-  padding: 0.48rem 0.7rem;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  min-height: 3rem;
+  padding: 0.42rem 0.58rem;
+  border: 1px solid rgba(255, 255, 255, 0.07);
   border-radius: 12px;
-  background: rgba(255, 255, 255, 0.03);
+  background:
+    linear-gradient(180deg, rgba(12, 20, 33, 0.74), rgba(9, 16, 29, 0.66)),
+    rgba(255, 255, 255, 0.02);
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.035),
-    0 12px 32px rgba(2, 6, 23, 0.12);
-  backdrop-filter: blur(14px);
+    inset 0 1px 0 rgba(255, 255, 255, 0.03),
+    0 10px 28px rgba(2, 6, 23, 0.1);
+  backdrop-filter: blur(12px);
 }
 
 .consoleTopbarActions {
@@ -1775,13 +1779,13 @@
 
 .consolePrimaryCard {
   display: grid;
-  gap: 1.05rem;
+  gap: 1rem;
   max-width: 100%;
-  background: rgba(255, 255, 255, 0.055);
-  border-color: rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.045);
+  border-color: rgba(255, 255, 255, 0.08);
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.05),
-    0 18px 42px rgba(2, 6, 23, 0.12);
+    inset 0 1px 0 rgba(255, 255, 255, 0.035),
+    0 14px 32px rgba(2, 6, 23, 0.1);
 }
 
 .scanWorkspace {
@@ -1792,12 +1796,13 @@
 }
 
 .scanFormCard {
-  gap: 1rem;
-  padding: 1.3rem;
+  gap: 0.9rem;
+  padding: 1.2rem;
   background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.075), rgba(255, 255, 255, 0.045)),
-    rgba(8, 17, 31, 0.86);
-  border-color: rgba(255, 255, 255, 0.12);
+    radial-gradient(circle at 86% 0%, rgba(79, 140, 255, 0.1), transparent 30%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.07), rgba(255, 255, 255, 0.035)),
+    rgba(8, 17, 31, 0.88);
+  border-color: rgba(255, 255, 255, 0.11);
 }
 
 .scanInfoRow {
@@ -1807,9 +1812,18 @@
 }
 
 .scanInfoCard {
-  gap: 0.75rem;
-  padding: 1.1rem;
-  background: rgba(255, 255, 255, 0.04);
+  gap: 0.68rem;
+  padding: 1rem;
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.scanInfoRow--support .scanInfoCard {
+  background: rgba(255, 255, 255, 0.025);
+  border-color: rgba(255, 255, 255, 0.06);
+}
+
+.scanInfoRow--support .cardTitle {
+  font-size: 0.98rem;
 }
 
 .scanCheckList {
@@ -1914,10 +1928,75 @@
   gap: 0.8rem;
 }
 
+.snapshotBandGrid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.9rem;
+}
+
+.snapshotBand {
+  display: grid;
+  gap: 0.78rem;
+  padding: 1rem 1.05rem;
+  border-radius: 12px;
+  border: 1px solid rgba(203, 213, 225, 0.12);
+  background: rgba(9, 16, 28, 0.66);
+}
+
+.snapshotBand--value {
+  background: linear-gradient(180deg, rgba(79, 140, 255, 0.08), rgba(9, 16, 28, 0.72));
+  border-color: rgba(79, 140, 255, 0.18);
+}
+
+.snapshotEyebrow {
+  color: #8fa2bb;
+  font-size: 0.7rem;
+  font-weight: 620;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.snapshotValue {
+  color: #f8fafc;
+  font-size: 1.25rem;
+  line-height: 1.05;
+  letter-spacing: -0.025em;
+}
+
+.snapshotSentence {
+  margin: 0;
+  color: #c2cfde;
+  font-size: 0.84rem;
+  line-height: 1.55;
+}
+
+.snapshotList {
+  display: grid;
+  gap: 0.65rem;
+}
+
+.snapshotList div {
+  display: grid;
+  gap: 0.18rem;
+  padding-top: 0.65rem;
+  border-top: 1px solid rgba(203, 213, 225, 0.08);
+}
+
+.snapshotList span {
+  color: #8fa2bb;
+  font-size: 0.74rem;
+}
+
+.snapshotList strong {
+  color: #eef5ff;
+  font-size: 0.92rem;
+  letter-spacing: -0.012em;
+}
+
 .snapshotDetails {
   display: grid;
   gap: 0.95rem;
-  padding-top: 0.25rem;
+  padding-top: 0.35rem;
 }
 
 .summaryCard {
@@ -1996,11 +2075,11 @@
 
 .stateDetailGroup {
   display: grid;
-  gap: 0.75rem;
+  gap: 0.7rem;
   padding: 0;
-  border-radius: 8px;
-  border: 1px solid rgba(203, 213, 225, 0.15);
-  background: rgba(255, 255, 255, 0.065);
+  border-radius: 10px;
+  border: 1px solid rgba(203, 213, 225, 0.12);
+  background: rgba(255, 255, 255, 0.045);
   overflow: hidden;
 }
 
@@ -2300,14 +2379,20 @@
 .watchlistItem,
 .actionCard {
   display: grid;
-  gap: 0.85rem;
+  gap: 0.75rem;
+}
+
+.watchlistItem {
+  padding: 1rem 1.05rem;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.035);
 }
 
 .watchlistMetaRow,
 .actionMeta {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.6rem 1rem;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.55rem 0.9rem;
   color: #9fb0c8;
   font-size: 0.8rem;
   line-height: 1.55;
@@ -2337,13 +2422,45 @@
   line-height: 1.65;
 }
 
+.closeReviewGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.8rem;
+}
+
+.closeReviewCard {
+  display: grid;
+  gap: 0.28rem;
+  padding: 0.95rem 1rem;
+  border-radius: 10px;
+  border: 1px solid rgba(203, 213, 225, 0.12);
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.closeReviewCard span {
+  color: #8fa2bb;
+  font-size: 0.74rem;
+}
+
+.closeReviewCard strong {
+  color: #f8fafc;
+  font-size: 0.98rem;
+  letter-spacing: -0.015em;
+}
+
+.closeReviewCard small {
+  color: #aebcd0;
+  font-size: 0.78rem;
+  line-height: 1.5;
+}
+
 .closeWarning {
   display: grid;
   gap: 0.3rem;
   padding: 1rem 1.05rem;
-  border-radius: 8px;
-  border: 1px solid rgba(239, 68, 68, 0.22);
-  background: rgba(127, 29, 29, 0.12);
+  border-radius: 10px;
+  border: 1px solid rgba(239, 68, 68, 0.2);
+  background: rgba(127, 29, 29, 0.1);
 }
 
 .closeWarning strong {
@@ -2513,7 +2630,7 @@
 
 .btn.primary {
   background: var(--accent);
-  color: #031225;
+  color: #f8fbff;
   border-color: transparent;
   box-shadow: 0 14px 42px rgba(79, 140, 255, 0.24);
 }
@@ -2521,14 +2638,14 @@
 .btn.primary.scanSubmit {
   min-height: 52px;
   padding-inline: 1.35rem;
-  background: #f8fafc;
-  color: #050b14;
-  border-color: rgba(255, 255, 255, 0.18);
-  box-shadow: 0 12px 30px rgba(255, 255, 255, 0.08);
+  background: linear-gradient(180deg, rgba(47, 111, 232, 1), rgba(33, 92, 207, 1));
+  color: #f8fbff;
+  border-color: rgba(47, 111, 232, 0.52);
+  box-shadow: 0 16px 38px rgba(47, 111, 232, 0.24);
 }
 
 .btn.primary.scanSubmit:hover:not(:disabled) {
-  background: #ffffff;
+  background: linear-gradient(180deg, rgba(58, 122, 238, 1), rgba(44, 102, 220, 1));
 }
 
 .btn.secondary {
@@ -2545,6 +2662,104 @@
 .btn.danger {
   background: linear-gradient(135deg, #ef4444, #b91c1c);
   border-color: transparent;
+}
+
+.consoleContent .input {
+  border-color: rgba(15, 23, 42, 0.12);
+  background: #ffffff;
+  color: #0f172a;
+  -webkit-text-fill-color: #0f172a;
+  caret-color: #2f6fe8;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.95),
+    0 8px 18px rgba(15, 23, 42, 0.035);
+}
+
+.consoleContent .input::placeholder {
+  color: #94a3b8;
+  -webkit-text-fill-color: #94a3b8;
+}
+
+.consoleContent .input:focus {
+  background: #ffffff;
+  border-color: rgba(47, 111, 232, 0.46);
+  box-shadow:
+    0 0 0 4px rgba(47, 111, 232, 0.1),
+    0 10px 24px rgba(15, 23, 42, 0.055);
+}
+
+.consoleContent .input:-webkit-autofill,
+.consoleContent .input:-webkit-autofill:hover,
+.consoleContent .input:-webkit-autofill:focus,
+.consoleContent .input:-webkit-autofill:active {
+  border-color: rgba(47, 111, 232, 0.22);
+  box-shadow:
+    inset 0 0 0 1000px #ffffff,
+    0 8px 18px rgba(15, 23, 42, 0.04);
+  -webkit-text-fill-color: #0f172a;
+  caret-color: #2f6fe8;
+  transition: background-color 9999s ease-out;
+}
+
+.consoleContent .segmented {
+  border-color: rgba(15, 23, 42, 0.08);
+  background: rgba(255, 255, 255, 0.96);
+}
+
+.consoleContent .seg {
+  color: #64748b;
+}
+
+.consoleContent .seg + .seg {
+  border-left: 1px solid rgba(15, 23, 42, 0.08);
+}
+
+.consoleContent .seg.active {
+  background: rgba(91, 141, 255, 0.12);
+  color: var(--text);
+  box-shadow: inset 0 0 0 1px rgba(91, 141, 255, 0.16);
+}
+
+.consoleContent .btn.secondary {
+  background: rgba(255, 255, 255, 0.96);
+  border-color: rgba(15, 23, 42, 0.1);
+  color: var(--text);
+}
+
+.consoleContent .btn.ghost {
+  background: transparent;
+  color: var(--muted);
+}
+
+.consoleContent .btn.secondary:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 1);
+  border-color: rgba(79, 140, 255, 0.18);
+}
+
+.consoleContent .summary.ok {
+  color: #166534;
+}
+
+.consoleContent .summary.warn {
+  color: #9a3412;
+}
+
+.consoleContent .error {
+  color: #b42318;
+}
+
+.consoleContent .blocker {
+  border-color: rgba(15, 23, 42, 0.08);
+  background: rgba(255, 255, 255, 0.98);
+  box-shadow: 0 10px 26px rgba(15, 23, 42, 0.04);
+}
+
+.consoleContent .blocker.blocking {
+  border-color: rgba(194, 65, 90, 0.22);
+}
+
+.consoleContent .blocker.info {
+  border-color: rgba(79, 140, 255, 0.18);
 }
 
 .summary {
@@ -3182,7 +3397,9 @@ code {
   .overviewControls,
   .watchlistAddRow,
   .stateDetailGrid,
-  .priorityFindingGrid {
+  .priorityFindingGrid,
+  .snapshotBandGrid,
+  .closeReviewGrid {
     grid-template-columns: 1fr;
   }
 
@@ -3214,6 +3431,10 @@ code {
     justify-self: stretch;
   }
 
+  .watchlistMetaRow {
+    grid-template-columns: 1fr 1fr;
+  }
+
   .pageIntro {
     padding-top: 0.5rem;
   }
@@ -3230,6 +3451,16 @@ code {
 
   .trustlineFacts {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 560px) {
+  .watchlistMetaRow {
+    grid-template-columns: 1fr;
+  }
+
+  .snapshotValue {
+    font-size: 1.12rem;
   }
 }
 
@@ -3617,5 +3848,1429 @@ code {
   .trustlineActions .btn {
     width: 100%;
     justify-content: center;
+  }
+}
+
+/* Quiet Orbital Utility overrides */
+:root {
+  color-scheme: dark;
+  --bg: #050b14;
+  --bg-soft: #08111f;
+  --text: #f4f8ff;
+  --muted: #a3b2c7;
+  --muted-strong: #d3dbe8;
+  --subtle: #6d7a8f;
+  --line: rgba(180, 198, 224, 0.12);
+  --line-strong: rgba(112, 134, 198, 0.14);
+  --card: rgba(255, 255, 255, 0.03);
+  --card-strong: rgba(255, 255, 255, 0.045);
+  --accent: #7192db;
+  --accent-strong: #91ade8;
+  --cyan: #77c7cf;
+  --emerald: #6dbc9c;
+  --amber: #c19a62;
+  --rose: #d27988;
+  --slate: #92a0b4;
+  --shadow: 0 24px 80px rgba(1, 5, 12, 0.34);
+}
+
+body {
+  background:
+    radial-gradient(circle at 18% 16%, rgba(113, 146, 219, 0.085), transparent 28%),
+    radial-gradient(circle at 82% 8%, rgba(119, 199, 207, 0.055), transparent 24%),
+    linear-gradient(180deg, #07111f 0%, #050b14 48%, #04070d 100%);
+  color: var(--text);
+}
+
+.page {
+  background:
+    radial-gradient(circle at 18% 12%, rgba(113, 146, 219, 0.09), transparent 22rem),
+    radial-gradient(circle at 80% 14%, rgba(119, 199, 207, 0.06), transparent 20rem),
+    linear-gradient(180deg, #07111f 0%, #050b14 100%);
+}
+
+.page--app {
+  min-height: 100dvh;
+  width: 100%;
+  overflow-x: hidden;
+  background:
+    linear-gradient(90deg, #060a12 0 17.5rem, #e7edf5 17.5rem 100%);
+}
+
+.page--app .workspace {
+  width: 100%;
+  max-width: none;
+  min-height: 100dvh;
+  margin: 0;
+  padding: 0;
+}
+
+.workspace--shell {
+  width: 100%;
+  min-height: 100dvh;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: 17.5rem minmax(0, 1fr);
+  gap: 0;
+  background: #e7edf5;
+}
+
+.consoleSidebar {
+  position: sticky;
+  top: 0;
+  min-height: 100dvh;
+  padding: 0;
+  border-radius: 0;
+  border-width: 0 1px 0 0;
+  border-color: rgba(180, 198, 224, 0.08);
+  background:
+    linear-gradient(180deg, rgba(6, 10, 18, 0.96), rgba(5, 8, 16, 0.94)),
+    rgba(255, 255, 255, 0.012);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.02),
+    8px 0 18px rgba(2, 6, 23, 0.05);
+  backdrop-filter: blur(12px);
+}
+
+.consoleSidebar .brand {
+  gap: 0.78rem;
+  padding: 1.55rem 1.25rem 0.55rem;
+}
+
+.sidebarIntro {
+  margin: 0.65rem 1.25rem 0;
+  padding: 0;
+  color: #8fa2bb;
+  font-size: 0.84rem;
+  line-height: 1.55;
+}
+
+.sidebarNav {
+  margin: 1.45rem 0 0;
+  padding: 0;
+  border-radius: 0;
+  border-width: 1px 0;
+  border-color: rgba(180, 198, 224, 0.08);
+  background: rgba(255, 255, 255, 0.012);
+}
+
+.sidebarNavButton {
+  padding: 1rem 1.25rem;
+  border-bottom-color: rgba(180, 198, 224, 0.05);
+  color: #8fa2bb;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.012), rgba(255, 255, 255, 0.004));
+}
+
+.sidebarNavButton--scan {
+  border-left: 2px solid rgba(91, 141, 255, 0.18);
+}
+
+.sidebarNavButton--health {
+  border-left: 2px solid rgba(90, 211, 154, 0.18);
+}
+
+.sidebarNavButton--close {
+  border-left: 2px solid rgba(229, 118, 134, 0.18);
+}
+
+.sidebarNavButton:hover {
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.sidebarNavButton--active {
+  background:
+    radial-gradient(circle at 0 50%, rgba(91, 141, 255, 0.16), transparent 36%),
+    rgba(255, 255, 255, 0.04);
+  color: var(--text);
+  border-color: rgba(91, 141, 255, 0.12);
+}
+
+.sidebarNavButton--scan.sidebarNavButton--active {
+  box-shadow: inset 4px 0 0 rgba(91, 141, 255, 0.72);
+}
+
+.sidebarNavButton--health.sidebarNavButton--active {
+  background:
+    radial-gradient(circle at 0 50%, rgba(90, 211, 154, 0.14), transparent 36%),
+    rgba(255, 255, 255, 0.04);
+  box-shadow: inset 4px 0 0 rgba(90, 211, 154, 0.72);
+}
+
+.sidebarNavButton--close.sidebarNavButton--active {
+  background:
+    radial-gradient(circle at 0 50%, rgba(229, 118, 134, 0.14), transparent 36%),
+    rgba(255, 255, 255, 0.04);
+  box-shadow: inset 4px 0 0 rgba(229, 118, 134, 0.72);
+}
+
+.sidebarNavMeta {
+  color: var(--subtle);
+}
+
+.sidebarBottom {
+  margin-top: 1.25rem;
+  padding: 0 1rem 1rem;
+}
+
+.sidebarWalletCard {
+  border-radius: 0.65rem;
+  border: 1px solid rgba(180, 198, 224, 0.06);
+  background: rgba(255, 255, 255, 0.02);
+  padding: 0.95rem;
+}
+
+.consoleContent {
+  --text: #0f172a;
+  --muted: #475569;
+  --muted-strong: #334155;
+  --subtle: #64748b;
+  --line: rgba(15, 23, 42, 0.08);
+  --line-strong: rgba(79, 140, 255, 0.2);
+  --card: rgba(255, 255, 255, 0.9);
+  --card-strong: rgba(255, 255, 255, 0.98);
+  --accent: #2f6fe8;
+  --accent-strong: #1e5bd8;
+  --cyan: #0891b2;
+  --emerald: #15803d;
+  --amber: #b45309;
+  --rose: #c2415a;
+  --ok: #15803d;
+  --warn: #b45309;
+  --err: #c2415a;
+  --slate: #64748b;
+  --shadow: 0 24px 70px rgba(15, 23, 42, 0.08);
+  gap: 1rem;
+  min-width: 0;
+  min-height: 100dvh;
+  padding: 1rem 1.5rem 1.5rem;
+  border-radius: 0;
+  border: 0;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.94), rgba(248, 250, 252, 0.98)),
+    #f8fafc;
+  box-shadow:
+    inset 1px 0 0 rgba(15, 23, 42, 0.07),
+    inset 14px 0 0 #e7edf5;
+}
+
+.consoleTopbar {
+  justify-content: space-between;
+  min-height: 3.25rem;
+  padding: 0.5rem 0.75rem;
+  margin-left: 1rem;
+  border-radius: 0.75rem;
+  border-color: rgba(15, 23, 42, 0.06);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.92), rgba(248, 250, 252, 0.88)),
+    rgba(255, 255, 255, 0.8);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.7),
+    0 6px 16px rgba(15, 23, 42, 0.035);
+}
+
+.topbarNetworkControl span {
+  color: var(--muted);
+}
+
+.networkSelect {
+  border-color: rgba(15, 23, 42, 0.1);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(248, 250, 252, 0.95)),
+    #fff;
+  color: var(--text);
+  min-height: 2.45rem;
+}
+
+.consolePrimaryCard,
+.card {
+  border-radius: 0.85rem;
+  border-color: rgba(15, 23, 42, 0.08);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(250, 252, 255, 0.96)),
+    #fff;
+  box-shadow: 0 12px 30px rgba(15, 23, 42, 0.04);
+}
+
+.appSection {
+  display: grid;
+  gap: 1rem;
+  padding: 0 0 0.25rem 1rem;
+}
+
+.appSection--scan {
+  background:
+    radial-gradient(circle at 12% 0%, rgba(91, 141, 255, 0.05), transparent 18rem),
+    radial-gradient(circle at 90% 18%, rgba(8, 145, 178, 0.025), transparent 16rem);
+}
+
+.appSection--health {
+  background:
+    linear-gradient(180deg, rgba(249, 250, 247, 0.98), rgba(246, 248, 244, 0.98)),
+    radial-gradient(circle at 96% 0%, rgba(21, 128, 61, 0.018), transparent 16rem);
+}
+
+.appSection--health .pageHeaderCopy p {
+  max-width: none;
+  white-space: nowrap;
+}
+
+.watchlistComposer .input {
+  border-color: rgba(15, 23, 42, 0.12);
+  background: #ffffff !important;
+  color: #0f172a !important;
+  -webkit-text-fill-color: #0f172a;
+  caret-color: #2f6fe8;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.95),
+    0 8px 18px rgba(15, 23, 42, 0.035);
+}
+
+.watchlistComposer .input::placeholder {
+  color: #94a3b8 !important;
+  -webkit-text-fill-color: #94a3b8;
+}
+
+.watchlistComposer .input:focus {
+  background: #ffffff !important;
+  border-color: rgba(47, 111, 232, 0.42);
+  box-shadow:
+    0 0 0 4px rgba(47, 111, 232, 0.1),
+    0 10px 24px rgba(15, 23, 42, 0.055);
+}
+
+.appSection--close {
+  background:
+    linear-gradient(180deg, rgba(255, 251, 249, 0.98), rgba(250, 247, 244, 0.98)),
+    radial-gradient(circle at 88% 0%, rgba(194, 65, 90, 0.026), transparent 16rem);
+}
+
+.scanHero {
+  display: grid;
+  gap: 0.5rem;
+  padding: 0.75rem 0 0.5rem;
+  position: relative;
+}
+
+.scanHero::before {
+  content: "";
+  position: absolute;
+  inset: auto auto -0.06rem 0;
+  width: 4.25rem;
+  height: 0.14rem;
+  border-radius: 999px;
+  background: linear-gradient(90deg, rgba(113, 146, 219, 1), rgba(119, 199, 207, 0.75));
+  box-shadow: 0 0 0 1px rgba(113, 146, 219, 0.1);
+}
+
+.scanHero h1 {
+  margin: 0;
+  color: var(--text);
+  font-size: 3rem;
+  line-height: 1;
+  letter-spacing: 0;
+  font-weight: 650;
+  max-width: none;
+  white-space: nowrap;
+}
+
+.scanHero p {
+  margin: 0;
+  max-width: none;
+  color: var(--muted);
+  font-size: 0.94rem;
+  line-height: 1.42;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: clip;
+}
+
+.scanWorkspace {
+  margin-top: 0.16rem;
+}
+
+.scanFormCard--hero {
+  gap: 1rem;
+  padding: 1.25rem 1.35rem;
+  border-color: rgba(91, 141, 255, 0.24);
+  background:
+    radial-gradient(circle at 12% 0%, rgba(91, 141, 255, 0.16), transparent 26%),
+    radial-gradient(circle at 88% 0%, rgba(8, 145, 178, 0.12), transparent 24%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(250, 252, 255, 0.96)),
+    #fff;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.8),
+    0 18px 42px rgba(15, 23, 42, 0.055);
+}
+
+.scanInputRow {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 1rem;
+  align-items: stretch;
+}
+
+.scanInputControl {
+  display: grid;
+  min-width: 0;
+}
+
+.scanInputRow .input {
+  height: 100%;
+  min-height: 3.25rem;
+}
+
+.scanInputRow .scanSubmit {
+  min-width: 7.5rem;
+  min-height: 3.25rem;
+  align-self: stretch;
+}
+
+.scanFormCard--hero .scanHelper {
+  margin: 0;
+  font-size: 0.9rem;
+  line-height: 1.5;
+}
+
+.supportBand {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1rem;
+  margin-top: 1rem;
+  align-items: stretch;
+}
+
+.supportBand--lower {
+  margin-top: 0.9rem;
+}
+
+.scanInfoCard {
+  min-height: 10.25rem;
+  padding: 1rem;
+  gap: 0.48rem;
+  position: relative;
+}
+
+.scanInfoCard:nth-child(1) {
+  border-color: rgba(91, 141, 255, 0.18);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(250, 252, 255, 0.96)),
+    radial-gradient(circle at 12% 0%, rgba(91, 141, 255, 0.08), transparent 28%);
+}
+
+.scanInfoCard:nth-child(2) {
+  border-color: rgba(8, 145, 178, 0.18);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(250, 252, 255, 0.96)),
+    radial-gradient(circle at 12% 0%, rgba(8, 145, 178, 0.08), transparent 28%);
+}
+
+.scanInfoCard:nth-child(3) {
+  border-color: rgba(245, 158, 11, 0.18);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(250, 252, 255, 0.96)),
+    radial-gradient(circle at 12% 0%, rgba(245, 158, 11, 0.08), transparent 28%);
+}
+
+.scanInfoCard:nth-child(1) .cardTitle {
+  color: var(--accent-strong);
+}
+
+.scanInfoCard:nth-child(2) .cardTitle {
+  color: var(--cyan);
+}
+
+.scanInfoCard:nth-child(3) .cardTitle {
+  color: var(--amber);
+}
+
+.scanInfoCard:nth-child(1)::before,
+.scanInfoCard:nth-child(2)::before,
+.scanInfoCard:nth-child(3)::before {
+  content: "";
+  height: 0.1rem;
+  width: 100%;
+  border-radius: 999px;
+  display: block;
+  margin-bottom: 0.1rem;
+}
+
+.scanInfoCard:nth-child(1)::before {
+  background: var(--accent);
+}
+
+.scanInfoCard:nth-child(2)::before {
+  background: var(--cyan);
+}
+
+.scanInfoCard:nth-child(3)::before {
+  background: var(--amber);
+}
+
+.snapshotSurface,
+.reportSurface {
+  display: grid;
+  gap: 0.72rem;
+  margin-top: 0.75rem;
+}
+
+.snapshotBandGrid {
+  grid-template-columns: minmax(0, 1.1fr) repeat(2, minmax(0, 1fr));
+  gap: 0.85rem;
+}
+
+.snapshotBand {
+  padding: 0.95rem;
+  border-radius: 0.85rem;
+  border-color: rgba(15, 23, 42, 0.08);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(250, 252, 255, 0.96)),
+    #fff;
+  box-shadow: 0 10px 26px rgba(15, 23, 42, 0.04);
+}
+
+.snapshotBand--state {
+  background:
+    radial-gradient(circle at 18% 12%, rgba(91, 141, 255, 0.1), transparent 45%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(250, 252, 255, 0.96)),
+    #fff;
+  border-color: rgba(91, 141, 255, 0.14);
+}
+
+.snapshotBand--value {
+  background:
+    radial-gradient(circle at 82% 10%, rgba(21, 128, 61, 0.08), transparent 40%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(250, 252, 255, 0.96)),
+    #fff;
+  border-color: rgba(21, 128, 61, 0.14);
+}
+
+.snapshotBand--review {
+  background:
+    radial-gradient(circle at 84% 10%, rgba(194, 65, 90, 0.08), transparent 42%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(250, 252, 255, 0.96)),
+    #fff;
+  border-color: rgba(194, 65, 90, 0.14);
+}
+
+.snapshotBand--state .snapshotEyebrow,
+.stateDetailGroup--unlock-value .stateDetailGroupHeading h3 {
+  color: var(--accent-strong);
+}
+
+.snapshotBand--value .snapshotEyebrow,
+.stateDetailGroup--remove-blockers .stateDetailGroupHeading h3 {
+  color: var(--emerald);
+}
+
+.snapshotBand--review .snapshotEyebrow,
+.stateDetailGroup--review-permissions .stateDetailGroupHeading h3 {
+  color: var(--amber);
+}
+
+.stateDetailGroup--close-safely .stateDetailGroupHeading h3 {
+  color: var(--rose);
+}
+
+.snapshotValue {
+  font-size: 1.65rem;
+  line-height: 1.02;
+}
+
+.snapshotSentence,
+.snapshotList span,
+.snapshotList strong {
+  color: var(--muted);
+}
+
+.stateDetailGrid {
+  gap: 0.75rem;
+}
+
+.sectionHeaderRow--compact {
+  margin-bottom: 0;
+}
+
+.stateDetailGroup {
+  border-radius: 0.85rem;
+  border-color: rgba(15, 23, 42, 0.08);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(250, 252, 255, 0.96)),
+    #fff;
+}
+
+.stateDetailGroup--unlock-value,
+.scanReportRow--unlock-value {
+  box-shadow: inset 0 0 0 1px rgba(113, 146, 219, 0.07);
+}
+
+.stateDetailGroup--remove-blockers,
+.scanReportRow--remove-blockers {
+  box-shadow: inset 0 0 0 1px rgba(109, 188, 156, 0.07);
+}
+
+.stateDetailGroup--review-permissions,
+.scanReportRow--review-permissions {
+  box-shadow: inset 0 0 0 1px rgba(193, 154, 98, 0.07);
+}
+
+.stateDetailGroup--close-safely,
+.scanReportRow--close-safely {
+  box-shadow: inset 0 0 0 1px rgba(210, 121, 136, 0.07);
+}
+
+.stateDetailGroup[open] {
+  border-color: rgba(79, 140, 255, 0.18);
+  background: rgba(255, 255, 255, 0.99);
+}
+
+.stateDetailGroup--unlock-value[open] {
+  border-color: rgba(113, 146, 219, 0.18);
+}
+
+.stateDetailGroup--remove-blockers[open] {
+  border-color: rgba(109, 188, 156, 0.18);
+}
+
+.stateDetailGroup--review-permissions[open] {
+  border-color: rgba(193, 154, 98, 0.18);
+}
+
+.stateDetailGroup--close-safely[open] {
+  border-color: rgba(210, 121, 136, 0.18);
+}
+
+.stateDetailGroupSummary,
+.scanReportRow summary {
+  padding: 0.86rem 0.95rem;
+}
+
+.stateDetailRows {
+  padding: 0 0.95rem 0.95rem;
+}
+
+.scanReportRow {
+  border-radius: 0.8rem;
+  border-color: rgba(15, 23, 42, 0.08);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.99), rgba(250, 252, 255, 0.96)),
+    #fff;
+}
+
+.scanReportRow--unlock-value summary {
+  border-left: 2px solid rgba(113, 146, 219, 0.34);
+}
+
+.scanReportRow--remove-blockers summary {
+  border-left: 2px solid rgba(109, 188, 156, 0.34);
+}
+
+.scanReportRow--review-permissions summary {
+  border-left: 2px solid rgba(193, 154, 98, 0.34);
+}
+
+.scanReportRow--close-safely summary {
+  border-left: 2px solid rgba(210, 121, 136, 0.34);
+}
+
+.scanReportRow[open] {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.99), rgba(250, 252, 255, 0.98)),
+    #fff;
+  border-color: rgba(79, 140, 255, 0.18);
+}
+
+.scanReportMain span,
+.protocolRow strong {
+  font-size: 0.9rem;
+  color: var(--text);
+}
+
+.scanReportMain p,
+.protocolRow p,
+.scanReportDetails p,
+.stateDetailGroupHeading p {
+  color: var(--muted);
+}
+
+.pageIntro p,
+.scanCheckList li,
+.scanReportMain p,
+.protocolRow p,
+.scanReportDetails p,
+.closeWarning p {
+  color: #475569;
+}
+
+.consoleContent .cardTitle,
+.consoleContent .pageIntro h1,
+.consoleContent .scanHero h1,
+.consoleContent .scanFormCard .cardTitle,
+.consoleContent .healthTableHeader,
+.consoleContent .healthRowCell strong,
+.consoleContent .closeReviewCard strong,
+.consoleContent .actionCard h3,
+.consoleContent .blockerTitle,
+.consoleContent .stateDetailGroup h3,
+.consoleContent .protocolList h3 {
+  color: #0f172a;
+}
+
+.consoleContent .scanHero p,
+.consoleContent .pageIntro p,
+.consoleContent .hint,
+.consoleContent .scanCheckList li,
+.consoleContent .scanReportMain p,
+.consoleContent .protocolRow p,
+.consoleContent .scanReportDetails p,
+.consoleContent .closeReviewCard small,
+.consoleContent .closeWarning p,
+.consoleContent .actionCard p,
+.consoleContent .blockerDesc,
+.consoleContent .healthRowCell span,
+.consoleContent .pageHeaderStatus small,
+.consoleContent .sidebarIntro,
+.consoleContent .sidebarNavMeta,
+.consoleContent .meta {
+  color: #475569;
+}
+
+.consoleContent .pageIntro h1,
+.consoleContent .scanHero h1 {
+  text-wrap: nowrap;
+  overflow: hidden;
+  text-overflow: clip;
+}
+
+.consoleContent .scanFormCard .cardTitle {
+  color: #0f172a;
+}
+
+.consoleContent .scanInfoCard .cardTitle {
+  color: #1e5bd8;
+}
+
+.consoleContent .scanHero::before {
+  background: linear-gradient(90deg, rgba(47, 111, 232, 1), rgba(8, 145, 178, 0.72));
+}
+
+.scanCheckList li::before {
+  background: var(--accent);
+}
+
+.scanReportAction {
+  min-width: 10.5rem;
+}
+
+.scanReportDetails dl {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.consoleContent .snapshotValue {
+  color: #0f172a;
+  font-weight: 700;
+  letter-spacing: 0;
+}
+
+.consoleContent .snapshotSentence {
+  color: #334155;
+}
+
+.consoleContent .snapshotList span {
+  color: #64748b;
+}
+
+.consoleContent .snapshotList strong {
+  color: #1f2937;
+}
+
+.consoleContent .snapshotBand {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.995), rgba(250, 252, 255, 0.98)),
+    #fff;
+}
+
+.consoleContent .stateDetailGroup {
+  border-color: rgba(15, 23, 42, 0.1);
+  background: #ffffff;
+  box-shadow:
+    0 1px 2px rgba(15, 23, 42, 0.045),
+    0 10px 24px rgba(15, 23, 42, 0.035);
+}
+
+.consoleContent .stateDetailGroupSummary {
+  min-height: 4.5rem;
+}
+
+.consoleContent .stateDetailGroup[open] {
+  border-color: rgba(47, 111, 232, 0.36);
+  box-shadow:
+    inset 0 3px 0 rgba(47, 111, 232, 0.82),
+    0 18px 36px rgba(15, 23, 42, 0.06);
+}
+
+.consoleContent .stateDetailGroupMeta {
+  color: #64748b;
+  font-weight: 650;
+}
+
+.consoleContent .stateDetailGroupMeta > span:first-child {
+  display: inline-flex;
+  align-items: center;
+  min-height: 1.8rem;
+  padding: 0 0.62rem;
+  border-radius: 999px;
+  border: 1px solid rgba(47, 111, 232, 0.18);
+  background: rgba(47, 111, 232, 0.08);
+  color: #1e5bd8;
+}
+
+.consoleContent .stateDetailGroupChevron {
+  width: 1.85rem;
+  height: 1.85rem;
+  border-color: rgba(15, 23, 42, 0.14);
+  background: #0f172a;
+  color: #ffffff;
+  box-shadow: 0 8px 18px rgba(15, 23, 42, 0.12);
+}
+
+.consoleContent .stateDetailGroup[open] .stateDetailGroupChevron {
+  background: #2f6fe8;
+}
+
+.consoleContent .scanReportRow {
+  border-color: rgba(15, 23, 42, 0.1);
+  background: #ffffff;
+  box-shadow: 0 8px 18px rgba(15, 23, 42, 0.035);
+}
+
+.consoleContent .scanReportRow[open] {
+  border-color: rgba(47, 111, 232, 0.28);
+  background: #fbfdff;
+}
+
+.consoleContent .scanReportMain span,
+.consoleContent .protocolRow strong {
+  color: #0f172a;
+}
+
+.consoleContent .stateValue {
+  border-color: rgba(15, 23, 42, 0.1);
+  background: #f8fafc;
+  color: #334155;
+}
+
+.consoleContent .stateValue--pass {
+  border-color: rgba(21, 128, 61, 0.22);
+  background: #ecfdf5;
+  color: #166534;
+}
+
+.consoleContent .stateValue--fail {
+  border-color: rgba(180, 83, 9, 0.24);
+  background: #fff7ed;
+  color: #9a3412;
+}
+
+.consoleContent .stateValue--unknown,
+.consoleContent .stateValue--skipped {
+  border-color: rgba(100, 116, 139, 0.18);
+  background: #f8fafc;
+  color: #475569;
+}
+
+.consoleContent .scanReportDetails {
+  border-top-color: rgba(15, 23, 42, 0.08);
+  background: linear-gradient(180deg, rgba(248, 250, 252, 0.72), rgba(255, 255, 255, 0.96));
+}
+
+.consoleContent .scanReportDetails dl > div {
+  border-color: rgba(15, 23, 42, 0.08);
+  background: #ffffff;
+}
+
+.consoleContent .scanReportDetails dt {
+  color: #64748b;
+}
+
+.consoleContent .scanReportDetails dd,
+.consoleContent .monoDetail {
+  color: #0f172a !important;
+}
+
+.consoleContent .trustlineEmbeddedTitle {
+  color: #0f172a;
+}
+
+.consoleContent .trustlineNotice {
+  border-color: rgba(15, 23, 42, 0.08);
+  background: #ffffff;
+  color: #475569;
+}
+
+.consoleContent .trustlineNotice--warn {
+  border-color: rgba(245, 158, 11, 0.24);
+  background: #fffbeb;
+  color: #92400e;
+}
+
+.consoleContent .trustlineNotice--error {
+  border-color: rgba(220, 38, 38, 0.2);
+  background: #fff1f2;
+  color: #b42318;
+}
+
+.consoleContent .trustlineToken {
+  border-color: rgba(15, 23, 42, 0.12);
+  background: #ffffff;
+  box-shadow: 0 10px 22px rgba(15, 23, 42, 0.045);
+}
+
+.consoleContent .trustlineToken[open] {
+  border-color: rgba(47, 111, 232, 0.28);
+  background: #fbfdff;
+}
+
+.consoleContent .trustlineTokenIdentity strong,
+.consoleContent .trustlineTokenBalance strong,
+.consoleContent .trustlineFact strong {
+  color: #0f172a;
+}
+
+.consoleContent .trustlineTokenIdentity span,
+.consoleContent .trustlineReserveHint,
+.consoleContent .trustlineTokenBalance span,
+.consoleContent .trustlineFact span,
+.consoleContent .trustlinePlannerHint {
+  color: #64748b;
+}
+
+.consoleContent .trustlineFact,
+.consoleContent .trustlinePlanner {
+  border-color: rgba(15, 23, 42, 0.08);
+  background: #ffffff;
+}
+
+.protocolList {
+  border-radius: 0.85rem;
+  border-color: rgba(15, 23, 42, 0.08);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(250, 252, 255, 0.96)),
+    #fff;
+}
+
+.technicalDetails--quiet {
+  padding: 0.25rem 1rem 1rem;
+  border-radius: 0.75rem;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(250, 252, 255, 0.96)),
+    #fff;
+}
+
+.technicalDetails--quiet summary {
+  padding: 0.8rem 0;
+}
+
+.healthTable {
+  display: grid;
+  gap: 0.42rem;
+  padding: 0.15rem 0 0;
+}
+
+.healthTableHeader,
+.healthRowCard {
+  display: grid;
+  grid-template-columns: minmax(15rem, 1.55fr) minmax(6rem, 0.7fr) minmax(8rem, 0.95fr) minmax(8rem, 0.95fr) minmax(9rem, 1fr) minmax(7rem, 0.8fr) minmax(11.5rem, auto);
+  gap: 0.85rem;
+}
+
+.healthTableHeader {
+  padding: 0 0.85rem;
+  color: var(--muted);
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0;
+}
+
+.healthRowCard {
+  align-items: center;
+  padding: 0.82rem 0.9rem;
+  border-radius: 0.8rem;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.99), rgba(250, 252, 255, 0.96)),
+    #fff;
+  position: relative;
+  box-shadow: 0 8px 22px rgba(15, 23, 42, 0.04);
+}
+
+.healthRowCard--ready {
+  border-color: rgba(21, 128, 61, 0.18);
+  background:
+    linear-gradient(90deg, rgba(21, 128, 61, 0.055), rgba(21, 128, 61, 0) 18rem),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.99), rgba(250, 252, 255, 0.96)),
+    #fff;
+  box-shadow:
+    inset 3px 0 0 rgba(21, 128, 61, 0.6),
+    0 8px 22px rgba(15, 23, 42, 0.04);
+}
+
+.healthRowCard--cleanup {
+  border-color: rgba(180, 83, 9, 0.18);
+  background:
+    linear-gradient(90deg, rgba(180, 83, 9, 0.055), rgba(180, 83, 9, 0) 18rem),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.99), rgba(250, 252, 255, 0.96)),
+    #fff;
+  box-shadow:
+    inset 3px 0 0 rgba(180, 83, 9, 0.6),
+    0 8px 22px rgba(15, 23, 42, 0.04);
+}
+
+.healthRowCard--review {
+  border-color: rgba(79, 140, 255, 0.18);
+  background:
+    linear-gradient(90deg, rgba(79, 140, 255, 0.055), rgba(79, 140, 255, 0) 18rem),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.99), rgba(250, 252, 255, 0.96)),
+    #fff;
+  box-shadow:
+    inset 3px 0 0 rgba(79, 140, 255, 0.58),
+    0 8px 22px rgba(15, 23, 42, 0.04);
+}
+
+.healthRowCell {
+  display: grid;
+  gap: 0.18rem;
+}
+
+.healthRowCell strong {
+  font-size: 0.92rem;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.healthRowCell span {
+  color: var(--muted);
+  font-size: 0.76rem;
+  line-height: 1.38;
+}
+
+.healthRowCell--action {
+  justify-self: end;
+  display: flex;
+  gap: 0.6rem;
+  flex-wrap: nowrap;
+  align-items: center;
+}
+
+.healthRowCell--action .btn {
+  min-height: 2.6rem;
+  padding-inline: 0.95rem;
+  white-space: nowrap;
+}
+
+.closeReviewSurface {
+  gap: 0.68rem;
+  border-color: rgba(194, 65, 90, 0.16);
+  background:
+    radial-gradient(circle at 80% 0%, rgba(194, 65, 90, 0.06), transparent 28%),
+    rgba(255, 255, 255, 0.98);
+}
+
+.closeReviewGrid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.closeWarning {
+  border-radius: 0.8rem;
+  border-color: rgba(194, 65, 90, 0.2);
+  background:
+    radial-gradient(circle at 84% 0%, rgba(194, 65, 90, 0.08), transparent 38%),
+    rgba(255, 243, 245, 0.95);
+}
+
+.closeWarning strong {
+  color: #9f1239;
+}
+
+.closeWarning p {
+  color: #7f1d2d;
+}
+
+.pageHeaderStatus {
+  border-color: rgba(15, 23, 42, 0.08);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(250, 252, 255, 0.96)),
+    #fff;
+}
+
+.pageHeaderStatus span {
+  color: var(--subtle);
+}
+
+.pageHeaderStatus strong {
+  color: var(--text);
+}
+
+.pageHeaderStatus small {
+  color: var(--muted);
+}
+
+.statusBadge {
+  border-color: rgba(15, 23, 42, 0.08);
+  background: rgba(255, 255, 255, 0.94);
+  color: var(--text);
+}
+
+.statusBadge--ok {
+  border-color: rgba(21, 128, 61, 0.18);
+  background: rgba(236, 253, 245, 0.94);
+  color: #166534;
+}
+
+.statusBadge--warn {
+  border-color: rgba(180, 83, 9, 0.18);
+  background: rgba(255, 247, 237, 0.94);
+  color: #9a3412;
+}
+
+.sectionKicker {
+  color: var(--accent);
+}
+
+.sectionKicker::before {
+  background: linear-gradient(90deg, var(--accent), transparent);
+}
+
+.closeActionTray {
+  position: sticky;
+  bottom: 0.75rem;
+  display: flex;
+  gap: 0.75rem;
+  justify-content: flex-end;
+  padding: 0.72rem 0 0.12rem;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0), rgba(248, 250, 252, 0.92));
+  backdrop-filter: blur(14px);
+}
+
+.sectionActions--scanFooter {
+  margin-top: 0.25rem;
+}
+
+.btn,
+.navLink,
+.sidebarNavButton {
+  transition:
+    transform 160ms ease,
+    background-color 160ms ease,
+    border-color 160ms ease,
+    color 160ms ease,
+    opacity 160ms ease,
+    box-shadow 160ms ease;
+}
+
+.btn:hover:not(:disabled),
+.navLink:hover,
+.sidebarNavButton:hover {
+  transform: translateY(-1px);
+}
+
+.btn.primary {
+  background: var(--accent);
+  color: #f8fbff;
+  box-shadow: 0 12px 36px rgba(79, 140, 255, 0.18);
+}
+
+.btn.secondary {
+  background: rgba(255, 255, 255, 0.04);
+  border-color: rgba(180, 198, 224, 0.14);
+}
+
+.btn.secondary:hover:not(:disabled) {
+  border-color: rgba(113, 146, 219, 0.18);
+  background: rgba(113, 146, 219, 0.06);
+}
+
+.btn.ghost {
+  color: var(--muted-strong);
+}
+
+.btn.danger {
+  background: linear-gradient(180deg, #ea5b63, #c63d49);
+}
+
+.input,
+.networkSelect,
+.segmented,
+.statusBadge,
+.snapshotBand,
+.stateDetailGroup,
+.scanReportRow,
+.protocolList,
+.healthRowCard,
+.closeReviewCard {
+  backdrop-filter: blur(10px);
+}
+
+@media (max-width: 1100px) {
+  .workspace--shell {
+    grid-template-columns: 1fr;
+  }
+
+  .consoleSidebar {
+    position: relative;
+    top: 0;
+    min-height: auto;
+    padding: 0.75rem;
+  }
+
+  .consoleContent {
+    min-height: auto;
+    padding: 0.85rem;
+    box-shadow: inset 0 1px 0 rgba(15, 23, 42, 0.07);
+  }
+
+  .consoleTopbar,
+  .appSection {
+    margin-left: 0;
+    padding-left: 0;
+  }
+}
+
+@media (max-width: 900px) {
+  .supportBand,
+  .snapshotBandGrid,
+  .closeReviewGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .healthTableHeader {
+    display: none;
+  }
+
+  .healthRowCard {
+    grid-template-columns: 1fr;
+    gap: 0.6rem;
+  }
+
+  .healthRowCell--action {
+    justify-self: start;
+    flex-wrap: wrap;
+  }
+
+  .healthRowCell::before {
+    content: attr(data-label);
+    display: block;
+    color: var(--subtle);
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    margin-bottom: 0.18rem;
+  }
+
+  .healthRowCell--account {
+    padding-bottom: 0.2rem;
+  }
+
+  .healthRowCell--action::before {
+    display: none;
+  }
+
+  .appSection--health .pageHeaderCopy p {
+    white-space: normal;
+  }
+
+  .closeActionTray {
+    flex-direction: column-reverse;
+  }
+
+  .closeActionTray .btn {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .scanHero {
+    gap: 0.5rem;
+  }
+
+  .scanHero h1 {
+    white-space: normal;
+  }
+
+  .scanHero p {
+    white-space: normal;
+    overflow: visible;
+    text-overflow: clip;
+    max-width: 42ch;
+  }
+
+  .scanInputRow {
+    grid-template-columns: 1fr;
+    gap: 0.75rem;
+  }
+
+  .scanInputRow .scanSubmit {
+    width: 100%;
+  }
+
+  .snapshotBand {
+    gap: 0.65rem;
+  }
+
+  .stateDetailGroupSummary,
+  .scanReportRow summary {
+    padding: 0.85rem 0.9rem;
+  }
+
+  .stateDetailRows {
+    padding: 0 0.9rem 0.9rem;
+  }
+
+  .closeReviewGrid {
+    gap: 0.65rem;
+  }
+
+  .appSection--scan,
+  .appSection--health,
+  .appSection--close {
+    background-attachment: scroll;
+  }
+}
+
+@media (max-width: 640px) {
+  .workspace--shell {
+    width: 100%;
+    padding-top: 0;
+  }
+
+  .consoleSidebar {
+    padding: 0.75rem 0.65rem;
+  }
+
+  .sidebarNav {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 0.45rem;
+    padding: 0.4rem;
+  }
+
+  .sidebarNavButton {
+    min-height: 3.85rem;
+    padding: 0.72rem 0.75rem;
+    border-radius: 0.95rem;
+    border-bottom-color: transparent;
+  }
+
+  .sidebarNavMeta {
+    display: block;
+    font-size: 0.72rem;
+  }
+
+  .sidebarBottom {
+    display: none;
+  }
+
+  .consoleTopbar {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.55rem;
+    margin-left: 0;
+  }
+
+  .consoleTopbarActions {
+    justify-content: stretch;
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+
+  .consoleTopbarActions .btn {
+    width: 100%;
+  }
+
+  .pageIntro {
+    gap: 0.38rem;
+  }
+
+  .pageIntro h1 {
+    font-size: 1.95rem;
+    line-height: 1.02;
+    white-space: normal;
+  }
+
+  .pageIntro p {
+    font-size: 0.92rem;
+    line-height: 1.55;
+  }
+
+  .scanHero h1 {
+    font-size: 2.05rem;
+    line-height: 1.06;
+  }
+
+  .scanHero p {
+    font-size: 0.92rem;
+  }
+
+  .scanHero::before {
+    width: 3.35rem;
+  }
+
+  .scanFormCard--hero {
+    padding: 0.9rem;
+  }
+
+  .scanFormCard--hero .scanHelper {
+    font-size: 0.9rem;
+    line-height: 1.55;
+  }
+
+  .scanInfoCard {
+    padding: 0.92rem;
+  }
+
+  .scanInfoCard:nth-child(1)::before,
+  .scanInfoCard:nth-child(2)::before,
+  .scanInfoCard:nth-child(3)::before {
+    width: 1.8rem;
+  }
+
+  .snapshotBand,
+  .stateDetailGroupSummary,
+  .scanReportRow summary,
+  .healthRowCard,
+  .closeReviewCard {
+    padding-left: 0.88rem;
+    padding-right: 0.88rem;
+  }
+
+  .scanReportRow summary {
+    grid-template-columns: 1fr;
+  }
+
+  .scanReportAction {
+    width: 100%;
+  }
+
+  .scanReportDetails dl {
+    grid-template-columns: 1fr;
+  }
+
+  .scanReportMain span,
+  .protocolRow strong {
+    font-size: 0.86rem;
+  }
+
+  .healthRowCell strong {
+    font-size: 0.86rem;
+  }
+
+  .healthRowCell span {
+    font-size: 0.74rem;
+  }
+
+  .closeActionTray {
+    position: static;
+    padding-top: 0.6rem;
+    gap: 0.55rem;
   }
 }
