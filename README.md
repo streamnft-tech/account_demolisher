@@ -53,6 +53,7 @@ stellar/
 ## Docs
 
 - [Use cases & components](docs/ORBITWAY_USECASES_AND_COMPONENTS.md) — includes **§5.4 Trustline removal policy** (sell vs snapshot book, payout + `ChangeTrust`, sponsorship / flags).
+- [Technical overview](docs/TECHNICAL_OVERVIEW.md) — tech stack, setup, runtime boundaries, and architecture summary with links to the Mermaid diagrams.
 
 ---
 
