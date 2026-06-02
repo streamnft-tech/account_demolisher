@@ -103,7 +103,7 @@ Important files:
 ### Install
 
 ```bash
-cd /Users/piyush/Desktop/work/stellar
+cd <WORK_DIRECTORY>
 npm install
 ```
 
