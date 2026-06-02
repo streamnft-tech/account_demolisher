@@ -523,7 +523,7 @@ Orbitway will move toward Soroban parity in stages:
 
 Until parity is reached, unsupported Soroban state will remain visible as a blocker rather than being hidden.
 
-## 12. Wallet Signing, Multisig, and Key Handling
+## 12. Wallet Signing, Multisig, and Transaction Model
 
 Orbitway follows a non-custodial signing model. Account scans are read-only and do not require wallet approval. Cleanup actions require explicit user review and wallet-side signing.
 
@@ -535,6 +535,24 @@ Orbitway's default signing path is wallet-based through Stellar Wallets Kit.
 | Multisig transaction assembly | Prepare transactions that can collect multiple signatures before submission. | Planned |
 | Local signing mode | Optional local-only signing for advanced or legacy accounts. | Planned |
 | Server-side signing | Not used. Private keys are never sent to the backend. | Not supported |
+
+Current write flow is intentionally non-custodial:
+
+- XDRs are constructed in the client for supported classic operations
+- user signatures are gathered through Stellar Wallets Kit
+- the API does not receive user secret keys
+- the API may use server-side credentials only for third-party service access such as Soroswap quote/build
+
+Implemented classic write helpers include:
+
+- remove data entries
+- cancel SDEX offers
+- withdraw LP shares
+- claim inbound claimable balances
+- remove empty trustlines
+- remove extra `ed25519_public_key` signers
+- set merge-friendly thresholds
+- perform plain `ACCOUNT_MERGE` to an existing destination account
 
 ### Direct secret key input
 
@@ -561,27 +579,7 @@ For multisig accounts, Orbitway will support transaction assembly and multi-sign
 
 This allows Orbitway to support multisig and legacy accounts without taking custody of user funds.
 
-## 13. Transaction and Signing Model
-
-Current write flow is intentionally non-custodial:
-
-- XDRs are constructed in the client for supported classic operations
-- user signatures are gathered through Stellar Wallets Kit
-- the API does not receive user secret keys
-- the API may use server-side credentials only for third-party service access such as Soroswap quote/build
-
-Implemented classic write helpers include:
-
-- remove data entries
-- cancel SDEX offers
-- withdraw LP shares
-- claim inbound claimable balances
-- remove empty trustlines
-- remove extra `ed25519_public_key` signers
-- set merge-friendly thresholds
-- perform plain `ACCOUNT_MERGE` to an existing destination account
-
-## 14. Current Limitations
+## 13. Current Limitations
 
 The repo is not yet a full demolition planner/executor. The main technical gaps are:
 
@@ -597,7 +595,7 @@ These limits are described in more detail in:
 - [README.md](../README.md)
 - [ORBITWAY_USECASES_AND_COMPONENTS.md](./ORBITWAY_USECASES_AND_COMPONENTS.md)
 
-## 15. Development Notes
+## 14. Development Notes
 
 When extending the codebase, keep these boundaries intact:
 
