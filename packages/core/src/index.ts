@@ -7,7 +7,9 @@ export type {
   HealthReport,
   HorizonAccountShape,
   BuildHealthReportInput,
+  ClassicAccountSummary,
   SorobanScanResult,
+  SponsoredLedgerEntry,
   HealthChecklistItem,
   ChecklistStatus,
 } from "./health.js";

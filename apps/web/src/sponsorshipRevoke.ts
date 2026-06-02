@@ -1,4 +1,5 @@
 import { BASE_FEE, Operation, TransactionBuilder } from "@stellar/stellar-sdk";
+import type { SponsoredLedgerEntry } from "@stellar/core";
 
 import type { UiNetwork } from "./network.js";
 import type { ClassicBatchResult } from "./classicClose.js";
@@ -194,5 +195,60 @@ export async function buildRevokeSponsorshipBatchXdr(params: {
     followUpHint: truncated
       ? "More sponsored entries remain — run again after this transaction confirms."
       : undefined,
+  };
+}
+
+export async function buildRevokeSponsorshipEntryXdr(params: {
+  horizonUrl: string;
+  sponsorAccountId: string;
+  network: UiNetwork;
+  entry: SponsoredLedgerEntry;
+}): Promise<ClassicBatchResult> {
+  const { entry } = params;
+  let op;
+  switch (entry.type) {
+    case "claimable_balance":
+      op = Operation.revokeClaimableBalanceSponsorship({ balanceId: entry.id });
+      break;
+    case "offer":
+      if (!entry.accountId) throw new Error("Missing seller account for sponsored offer.");
+      op = Operation.revokeOfferSponsorship({ seller: entry.accountId, offerId: entry.id });
+      break;
+    case "liquidity_pool":
+      op = Operation.revokeLiquidityPoolSponsorship({ liquidityPoolId: entry.id });
+      break;
+    case "signer":
+      if (!entry.accountId) throw new Error("Missing account for sponsored signer.");
+      op = Operation.revokeSignerSponsorship({
+        account: entry.accountId,
+        signer: { ed25519PublicKey: entry.id },
+      });
+      break;
+    case "account":
+      op = Operation.revokeAccountSponsorship({ account: entry.accountId ?? entry.id });
+      break;
+    case "trustline":
+      throw new Error("Individual trustline sponsorship revoke needs raw asset details. Use batch revoke for this entry.");
+    default:
+      throw new Error(`Unsupported sponsored entry type ${(entry as { type?: string }).type ?? "unknown"}.`);
+  }
+
+  const server = horizonServer(params.horizonUrl);
+  const source = await server.loadAccount(params.sponsorAccountId);
+  const xdr = new TransactionBuilder(source, {
+    fee: BASE_FEE,
+    networkPassphrase: sdkPassphrase(params.network),
+  })
+    .addOperation(op)
+    .setTimeout(180)
+    .build()
+    .toXDR();
+
+  return {
+    xdr,
+    opCount: 1,
+    totalDiscovered: 1,
+    truncated: false,
+    followUpHint: "Re-run health after confirmation to update remaining sponsorships.",
   };
 }

@@ -11,6 +11,7 @@ import {
 import { fetchSdexOffersForSeller } from "./fetchClassicPositions.js";
 import { fetchClaimableBalanceIdsForClaimant } from "./fetchClaimableBalances.js";
 import { fetchOrderBookSellingCreditForNative } from "./fetchOrderBook.js";
+import { fetchSponsoredEntriesForSponsor } from "./fetchSponsoredEntries.js";
 import { scanDefiProtocols } from "./defiScan.js";
 import { resolveSorobanRpcUrl, scanSorobanForAccount } from "./sorobanScan.js";
 import { buildSoroswapSellCreditToNativeXdr, soroswapBearerConfigured } from "./soroswapClient.js";
@@ -268,7 +269,7 @@ app.get("/api/account/:accountId/health", async (request, reply) => {
       return reply.send(report);
     }
 
-    const [sdexOffers, soroban, defiProtocols, claimableIdsResult] = await Promise.all([
+    const [sdexOffers, soroban, defiProtocols, claimableIdsResult, sponsoredEntries] = await Promise.all([
       fetchSdexOffersForSeller(id, network, request.log),
       scanSorobanForAccount({ accountId: id, horizonAccount: account, network, log: request.log }),
       scanDefiProtocols({ accountId: id, network, sorobanRpcUrl }),
@@ -278,6 +279,7 @@ app.get("/api/account/:accountId/health", async (request, reply) => {
           request.log.warn({ err }, "claimable_balances scan failed");
           return { ok: false };
         }),
+      fetchSponsoredEntriesForSponsor(id, network, request.log),
     ]);
     const inboundClaimableBalanceCount = claimableIdsResult.ok ? claimableIdsResult.ids.length : undefined;
     const lpShares = extractLiquidityPoolSharesFromHorizonBalances(
@@ -294,6 +296,7 @@ app.get("/api/account/:accountId/health", async (request, reply) => {
       offersCount,
       soroban,
       inboundClaimableBalanceCount,
+      sponsoredEntries,
       openPositions: {
         sdexOffers,
         liquidityPoolShares: lpShares,

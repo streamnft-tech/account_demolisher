@@ -59,6 +59,38 @@ export interface SorobanScanResult {
   allowanceCheckIncomplete: boolean;
 }
 
+export interface ClassicAccountSummary {
+  sponsorships: {
+    sponsoringCount: number;
+    entries?: SponsoredLedgerEntry[];
+  };
+  signers: {
+    accountId: string;
+    masterWeight: number;
+    extra: Array<{ key: string; weight: number }>;
+  };
+  thresholds: {
+    low: number;
+    medium: number;
+    high: number;
+    mergeFriendly: boolean;
+  };
+}
+
+export interface SponsoredLedgerEntry {
+  type:
+    | "claimable_balance"
+    | "offer"
+    | "liquidity_pool"
+    | "trustline"
+    | "signer"
+    | "account";
+  id: string;
+  label: string;
+  accountId?: string;
+  detail?: string;
+}
+
 export interface HealthReport {
   accountId: string;
   sequence?: string;
@@ -70,6 +102,8 @@ export interface HealthReport {
   sorobanRpcUrl?: string;
   nativeBalanceXlm?: number;
   checklist: HealthChecklistItem[];
+  /** Safe derived classic-account details for user-facing review rows. */
+  classicAccount?: ClassicAccountSummary;
   /** When present, SDEX offers + LP rows + protocol metadata for merge prep (from API scan). */
   openPositions?: OpenPositionsSnapshot;
 }
@@ -109,6 +143,8 @@ export interface BuildHealthReportInput {
   soroban: SorobanScanResult | null;
   /** Inbound claimable balances where this account is a claimant (Horizon); optional for health reports built without this scan. */
   inboundClaimableBalanceCount?: number;
+  /** Sponsored ledger entries where this account is the sponsor. */
+  sponsoredEntries?: SponsoredLedgerEntry[];
   /** Full classic offer list + defi protocol surface; LP shares may be omitted and derived from Horizon balances. */
   openPositions?: OpenPositionsSnapshot | null;
 }
@@ -212,7 +248,7 @@ export function buildHealthReport(input: BuildHealthReportInput): HealthReport {
     id: "classic_sponsorship",
     label: "Not sponsoring other accounts' reserves",
     status: numSponsoring > 0 ? "fail" : "pass",
-    detail: numSponsoring > 0 ? `num_sponsoring = ${numSponsoring}` : undefined,
+    detail: numSponsoring > 0 ? `${numSponsoring} sponsored reserve unit(s)` : undefined,
     blocksDemolish: true,
   });
 
@@ -565,6 +601,30 @@ function finalizeReport(opts: {
     sorobanRpcUrl: opts.input.sorobanRpcUrl,
     nativeBalanceXlm: opts.nativeBalance,
     checklist: opts.checklist,
+    classicAccount: opts.input.horizonAccount
+      ? {
+          sponsorships: {
+            sponsoringCount: opts.input.horizonAccount.num_sponsoring ?? 0,
+            entries: opts.input.sponsoredEntries,
+          },
+          signers: {
+            accountId: opts.input.horizonAccount.id,
+            masterWeight: opts.input.horizonAccount.signers?.find((s) => s.key === opts.input.horizonAccount?.id)?.weight ?? 0,
+            extra: (opts.input.horizonAccount.signers ?? [])
+              .filter((s) => s.key !== opts.input.horizonAccount?.id)
+              .map((s) => ({ key: s.key, weight: s.weight })),
+          },
+          thresholds: {
+            low: opts.input.horizonAccount.thresholds?.low_threshold ?? 1,
+            medium: opts.input.horizonAccount.thresholds?.med_threshold ?? 0,
+            high: opts.input.horizonAccount.thresholds?.high_threshold ?? 0,
+            mergeFriendly:
+              (opts.input.horizonAccount.thresholds?.low_threshold ?? 1) <= 1 &&
+              (opts.input.horizonAccount.thresholds?.med_threshold ?? 0) === 0 &&
+              (opts.input.horizonAccount.thresholds?.high_threshold ?? 0) === 0,
+          },
+        }
+      : undefined,
     openPositions: opts.openPositions,
   };
 }

@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useState, type CSSProperties, type ReactNode } from "react";
-import type { Blocker, BlockerCode, ChecklistStatus, HealthChecklistItem, HealthReport } from "@stellar/core";
+import { useCallback, useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import type { Blocker, BlockerCode, ChecklistStatus, HealthChecklistItem, HealthReport, SponsoredLedgerEntry } from "@stellar/core";
 import { isValidClassicAddress } from "@stellar/core";
 import type { UiNetwork } from "./network.js";
 import {
@@ -11,6 +11,7 @@ import {
   signWithWallet,
 } from "./walletKit.js";
 import { runClassicBlockerFix } from "./classicBlockerHandlers.js";
+import { buildRevokeSponsorshipEntryXdr } from "./sponsorshipRevoke.js";
 import type { ClassicBatchResult } from "./classicClose.js";
 import { sdkPassphrase, submitSignedClassicTx } from "./classicClose.js";
 import { buildAccountMergeBatchXdr } from "./classicDemolish.js";
@@ -142,8 +143,8 @@ const footerLinks = {
 const scanChecklistLabels = [
   "Estimated reserve release",
   "Trustline cleanup",
-  "Permission review",
-  "Manual protocol review",
+  "Account states",
+  "Open offers and DeFi tools",
   "Close readiness",
 ];
 
@@ -627,13 +628,18 @@ function stateRowCopy(row: HealthChecklistItem | undefined): { value: string; de
   return { value: "Unable to verify", detail: row.detail ?? "Requires rescan or manual verification.", tone: "unknown" };
 }
 
-function scanRowCopy(label: string, row: HealthChecklistItem | undefined, health: HealthReport) {
-  if (label === "Estimated reserve release") {
+function scanRowCopy(
+  label: string,
+  row: HealthChecklistItem | undefined,
+  health: HealthReport,
+  context?: { reserveReleaseLabel?: string; destination?: string; destOk?: boolean },
+) {
+  if (label === "Estimated reserve") {
     return row?.status === "pass"
-      ? { value: "Ready", detail: "Reserve tied to removable trustlines is no longer blocked.", tone: "pass" }
+      ? { value: "0 XLM locked value", detail: "No removable trustlines were returned by the latest scan.", tone: "pass" }
       : {
-          value: "Locked value",
-          detail: "Token lines still hold reserve. Review the trustline planner to release it safely.",
+          value: context?.reserveReleaseLabel ? `${context.reserveReleaseLabel} locked value` : "Locked value not estimated",
+          detail: "Token lines still hold reserve. Review each trustline below to release it safely.",
           tone: "fail",
         };
   }
@@ -642,66 +648,65 @@ function scanRowCopy(label: string, row: HealthChecklistItem | undefined, health
       ? { value: "None", detail: "No claimable balances were returned by the latest scan.", tone: "pass" }
       : { value: "Available", detail: "These balances are claimable to the account and are separate from reserve release.", tone: "fail" };
   }
-  if (label === "Token-line cleanup opportunities") {
-    return row?.status === "pass"
-      ? { value: "Clear", detail: "No token lines need cleanup before close.", tone: "pass" }
-      : {
-          value: "Review token lines",
-          detail: "Each token line can be handled individually so you can unlock value without guesswork.",
-          tone: "fail",
-        };
-  }
   if (label === "Trustlines") {
     return row?.status === "pass"
       ? { value: "Clear", detail: "No removable trustlines were detected.", tone: "pass" }
       : { value: "Needs cleanup", detail: "Trustlines must be resolved before the account can close cleanly.", tone: "fail" };
   }
   if (label === "Sponsorships") {
+    const count = health.classicAccount?.sponsorships.sponsoringCount ?? 0;
+    const entryCount = health.classicAccount?.sponsorships.entries?.length ?? 0;
+    const estimatedReserveXlm = count * BASE_RESERVE_XLM;
     return row?.status === "pass"
       ? { value: "None", detail: "No sponsorship relationships are blocking the account.", tone: "pass" }
-      : { value: "Blocked", detail: "Sponsored reserves must be cleared before final close.", tone: "fail" };
+      : {
+          value: count > 0 ? `~${formatEstimatedXlm(estimatedReserveXlm)} reserved` : "Sponsored reserve",
+          detail:
+            entryCount > 0
+              ? `${entryCount} sponsored ${entryCount === 1 ? "entry" : "entries"} found. This account is paying reserve for sponsored ledger entries.`
+              : "This account is paying reserve for sponsored ledger entries.",
+          tone: "fail",
+        };
   }
-  if (label === "Open activity") {
+  if (label === "Open offers") {
     return row?.status === "pass"
-      ? { value: "Clear", detail: "No open offers or liquidity positions remain.", tone: "pass" }
-      : { value: "Needs cleanup", detail: "Open offers or positions may still block cleanup or close.", tone: "fail" };
+      ? { value: "Clear", detail: "No outstanding SDEX orders were returned by the latest scan.", tone: "pass" }
+      : { value: "Needs cleanup", detail: "Outstanding SDEX orders can block a clean account close.", tone: "fail" };
   }
-  if (label === "LP positions") {
+  if (label === "Liquidity positions") {
     return row?.status === "pass"
-      ? { value: "Clear", detail: "No liquidity pool positions were returned.", tone: "pass" }
-      : { value: "Needs cleanup", detail: "Liquidity positions can block a clean exit.", tone: "fail" };
+      ? { value: "Clear", detail: "No AMM or liquidity-pool share balances were returned.", tone: "pass" }
+      : { value: "Needs cleanup", detail: "Liquidity-pool share balances may need withdrawal before close.", tone: "fail" };
   }
   if (label === "Allowances") {
-    if (!row || row.status === "skipped" || row.status === "unknown") {
-      return {
-        value: "Manual review",
-        detail: "Spender configuration was not fully available, so approvals need a manual look.",
-        tone: "unknown",
-      };
-    }
-    return row.status === "pass"
-      ? { value: "Clear", detail: "No active token approvals were returned by the scan.", tone: "pass" }
-      : { value: "Needs review", detail: "Active approvals may still let external spenders move assets.", tone: "fail" };
+    return {
+      value: "Coming soon",
+      detail: "Allowance discovery is planned, but revoke actions are not integrated yet.",
+      tone: "unknown",
+    };
   }
-  if (label === "Extra signers / shared control") {
+  if (label === "Account control") {
     return row?.status === "pass"
       ? { value: "Single control", detail: "No additional signers were detected.", tone: "pass" }
-      : { value: "Shared control", detail: "This account may use shared control or multisig-style approvals.", tone: "fail" };
+      : { value: "Shared control", detail: "Signer keys and approval weights should be reviewed before write actions.", tone: "fail" };
   }
   if (label === "Thresholds / approval rules") {
     return row?.status === "pass"
       ? { value: "Default", detail: "Approval rules are at the expected defaults.", tone: "pass" }
       : { value: "Review rules", detail: "Custom approval rules should be checked before cleanup or close.", tone: "fail" };
   }
-  if (label === "Manual protocol review") {
-    return row?.status === "pass"
-      ? { value: "None", detail: "No extra protocol review was returned by the latest scan.", tone: "pass" }
-      : { value: "Review", detail: "Protocol details should be expanded before you close this account.", tone: "unknown" };
-  }
   if (label === "Destination") {
+    const destination = context?.destination?.trim() ?? "";
+    if (destination && context?.destOk) {
+      return {
+        value: "Saved",
+        detail: `Destination saved: ${formatAccount(destination)}.`,
+        tone: "pass",
+      };
+    }
     return {
       value: "Not set",
-      detail: "Choose and verify a destination before triggering the final close flow.",
+      detail: "Save a destination before triggering the final close flow.",
       tone: "unknown",
     };
   }
@@ -721,14 +726,23 @@ function formatXlmCompact(value: number | undefined): string {
   }).format(value) + " XLM";
 }
 
+function formatEstimatedXlm(value: number): string {
+  return new Intl.NumberFormat(undefined, {
+    minimumFractionDigits: value < 10 ? 1 : 0,
+    maximumFractionDigits: 2,
+  }).format(value) + " XLM";
+}
+
 function rowActionFor(
   row: HealthChecklistItem | undefined,
   opts: {
     walletConnected: boolean;
     onConnectWallet: () => void;
     onCloseStep: () => void;
+    onTrustlinePlanner: () => void;
     onResolveClassicBlocker: (code: BlockerCode) => void;
     walletBusy: boolean;
+    pendingClassicAction: BlockerCode | null;
   },
 ): { label: string; disabled?: boolean; onClick?: () => void } {
   if (!row) return { label: "Unsupported", disabled: true };
@@ -737,24 +751,29 @@ function rowActionFor(
   if (row.id === "classic_min_reserve") return { label: "Set destination", onClick: opts.onCloseStep };
   if (row.id === "defi_positions") return { label: "Review manually" };
   if (row.id === "soroban_allowances") {
-    if (row.status === "skipped" || row.status === "unknown") return { label: "Review approvals" };
-    return opts.walletConnected ? { label: "Revoke allowance" } : { label: "Connect Wallet", onClick: opts.onConnectWallet };
+    return { label: "Coming soon", disabled: true };
   }
   const blockerActions: Partial<Record<string, { code: BlockerCode; label: string }>> = {
     classic_open_offers: { code: "OPEN_OFFERS", label: "Cancel open offers" },
     classic_claimable_balances: { code: "CLAIMABLE_BALANCES_PENDING", label: "Claim balance" },
-    classic_sponsorship: { code: "SPONSORING_OTHER_ACCOUNTS", label: "Resolve sponsorship" },
+    classic_sponsorship: { code: "SPONSORING_OTHER_ACCOUNTS", label: "Revoke sponsored reserves" },
     classic_data_entries: { code: "DATA_ENTRIES", label: "Remove data entries" },
     classic_extra_signers: { code: "MULTISIG_OR_EXTRA_SIGNERS", label: "Review signers" },
     classic_thresholds: { code: "NON_DEFAULT_THRESHOLDS", label: "Review approval rules" },
     classic_amm_lp_shares: { code: "OPEN_LIQUIDITY_POOL", label: "Close position" },
   };
   if (row.id === "classic_trustlines") {
-    return opts.walletConnected ? { label: "Open trustline planner" } : { label: "Connect Wallet", onClick: opts.onConnectWallet };
+    return { label: "Open token planner", onClick: opts.onTrustlinePlanner };
   }
   const action = blockerActions[row.id];
   if (action) {
     if (!opts.walletConnected) return { label: "Connect Wallet", onClick: opts.onConnectWallet };
+    if (opts.pendingClassicAction === action.code) {
+      return {
+        label: action.code === "SPONSORING_OTHER_ACCOUNTS" ? "Preparing wallet approval..." : "Preparing...",
+        disabled: true,
+      };
+    }
     return {
       label: action.label,
       disabled: opts.walletBusy,
@@ -765,6 +784,200 @@ function rowActionFor(
   return { label: "Unsupported", disabled: true };
 }
 
+function formatLongKey(key: string): string {
+  if (key.length <= 18) return key;
+  return `${key.slice(0, 8)}...${key.slice(-6)}`;
+}
+
+function sponsorshipEntryKey(entry: SponsoredLedgerEntry): string {
+  return `${entry.type}:${entry.id}:${entry.accountId ?? ""}`;
+}
+
+function sponsorshipEntryAddress(entry: SponsoredLedgerEntry): string {
+  return entry.accountId ?? entry.id;
+}
+
+function canRevokeSponsoredEntry(entry: SponsoredLedgerEntry): boolean {
+  return entry.type !== "trustline";
+}
+
+function sponsorshipEntryTypeLabel(type: SponsoredLedgerEntry["type"]): string {
+  return type.replaceAll("_", " ");
+}
+
+function SponsorshipRowDetails({
+  health,
+  pending,
+  pendingEntryKey,
+  walletConnected,
+  walletBusy,
+  onConnectWallet,
+  onRevokeEntry,
+  showIntro = true,
+  showTechnical = true,
+}: {
+  health: HealthReport;
+  pending: boolean;
+  pendingEntryKey: string | null;
+  walletConnected: boolean;
+  walletBusy: boolean;
+  onConnectWallet: () => void;
+  onRevokeEntry: (entry: SponsoredLedgerEntry) => void;
+  showIntro?: boolean;
+  showTechnical?: boolean;
+}) {
+  const sponsorshipRow = health.checklist.find((row) => row.id === "classic_sponsorship");
+  const rowCountMatch = sponsorshipRow?.detail?.match(/(\d+)/);
+  const fallbackCount = rowCountMatch ? Number(rowCountMatch[1]) : 0;
+  const count = health.classicAccount?.sponsorships.sponsoringCount ?? fallbackCount;
+  const entries = health.classicAccount?.sponsorships.entries ?? [];
+  const visibleEntries = entries.slice(0, 12);
+  const estimatedReserveXlm = count * BASE_RESERVE_XLM;
+  return (
+    <div className="scanInsightBlock">
+      {showIntro ? (
+        <p>
+          This account is paying about {count > 0 ? formatEstimatedXlm(estimatedReserveXlm) : "an unknown amount of XLM"} of
+          reserve{entries.length > 0 ? ` for ${entries.length} sponsored entr${entries.length === 1 ? "y" : "ies"}` : ""}.
+          Revoke sponsorship before closing.
+        </p>
+      ) : null}
+      {entries.length > 0 ? (
+        <div className="sponsorshipEntryList">
+          <div className="sponsorshipEntryListHeader">
+            <strong>
+              Sponsored entries found: {entries.length}
+            </strong>
+            <span>~{formatEstimatedXlm(estimatedReserveXlm)} estimated reserve</span>
+          </div>
+          {visibleEntries.map((entry) => {
+            const key = sponsorshipEntryKey(entry);
+            const entryPending = pendingEntryKey === key;
+            const supported = canRevokeSponsoredEntry(entry);
+            const entryReserveXlm = entries.length > 0 ? estimatedReserveXlm / entries.length : estimatedReserveXlm;
+            return (
+            <article key={key} className="sponsorshipEntry resultActionRow resultActionRow--state">
+              <span className="stateValue stateValue--fail">{sponsorshipEntryTypeLabel(entry.type)}</span>
+              <div className="sponsorshipEntryMain">
+                <strong className="monoDetail">{formatLongKey(sponsorshipEntryAddress(entry))}</strong>
+                <p>{entry.detail && entry.detail !== formatLongKey(sponsorshipEntryAddress(entry)) ? entry.detail : "Sponsored ledger entry"}</p>
+              </div>
+              <div className="sponsorshipEntryReserve">
+                <span>Estimated reserve</span>
+                <strong>~{formatEstimatedXlm(entryReserveXlm)}</strong>
+              </div>
+              <button
+                type="button"
+                className={supported && walletConnected ? "btn secondary sponsorshipEntryAction" : "btn ghost sponsorshipEntryAction"}
+                disabled={walletBusy || !supported}
+                title={supported ? "Revoke this sponsored entry" : "Use batch revoke for this sponsored entry type"}
+                onClick={(event) => {
+                  event.preventDefault();
+                  event.stopPropagation();
+                  if (!walletConnected) {
+                    onConnectWallet();
+                    return;
+                  }
+                  onRevokeEntry(entry);
+                }}
+              >
+                {entryPending ? "Preparing..." : walletConnected ? "Revoke" : "Connect"}
+              </button>
+            </article>
+            );
+          })}
+          {entries.length > visibleEntries.length ? (
+            <p className="meta">Showing first {visibleEntries.length}; revoke action will prepare the next supported batch.</p>
+          ) : null}
+        </div>
+      ) : count > 0 ? (
+        <p className="actionProgressNote">
+          Orbitway found the sponsorship count, but Horizon did not return entry details in this scan. The revoke action will
+          still discover supported entries before wallet approval.
+        </p>
+      ) : null}
+      {pending ? (
+        <p className="actionProgressNote">
+          Orbitway is finding sponsored ledger entries. Your wallet approval will appear after the transaction is prepared.
+        </p>
+      ) : showTechnical ? (
+        <p className="meta">
+          Technical: Horizon reports num_sponsoring = {count || "unknown"} reserve unit{count === 1 ? "" : "s"}. Base reserve is
+          estimated at {BASE_RESERVE_XLM} XLM, so this is about{" "}
+          {count > 0 ? formatEstimatedXlm(estimatedReserveXlm) : "an unknown XLM amount"}. If more sponsored entries remain
+          after revoke, Orbitway will ask you to run the action again after confirmation.
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
+function PermissionRowDetails({ health, row }: { health: HealthReport; row: HealthChecklistItem | undefined }) {
+  const account = health.classicAccount;
+  if (!account) return <p>{row?.detail ?? "Permission details were not returned by this scan."}</p>;
+  const isExtraSignerRow = row?.id === "classic_extra_signers";
+  const isThresholdRow = row?.id === "classic_thresholds";
+  if (!isExtraSignerRow && !isThresholdRow) return <p>{row?.detail ?? "Review this permission state before write actions."}</p>;
+
+  return (
+    <div className="scanInsightBlock">
+      <p>
+        These are keys allowed to approve actions for this account. This scan shows who can control this account; it does not
+        prove where this account is a signer on someone else's multisig.
+      </p>
+      <dl className="authorityGrid">
+        <div>
+          <dt>Master key weight</dt>
+          <dd>{account.signers.masterWeight}</dd>
+        </div>
+        <div>
+          <dt>Extra signers</dt>
+          <dd>{account.signers.extra.length}</dd>
+        </div>
+        <div>
+          <dt>Thresholds</dt>
+          <dd>
+            low {account.thresholds.low} / med {account.thresholds.medium} / high {account.thresholds.high}
+          </dd>
+        </div>
+        <div>
+          <dt>Merge-friendly</dt>
+          <dd>{account.thresholds.mergeFriendly ? "Yes" : "Needs cleanup"}</dd>
+        </div>
+      </dl>
+      {account.signers.extra.length > 0 ? (
+        <ul className="signerList">
+          {account.signers.extra.map((signer) => (
+            <li key={signer.key}>
+              <span className="monoDetail">{formatLongKey(signer.key)}</span>
+              <strong>weight {signer.weight}</strong>
+            </li>
+          ))}
+        </ul>
+      ) : null}
+    </div>
+  );
+}
+
+function ProtocolReviewRows({ health }: { health: HealthReport }) {
+  const protocols = health.openPositions?.defiProtocols ?? [];
+  if (protocols.length === 0) return null;
+  return (
+    <div className="protocolReviewStack">
+      <h4>DeFi-specific tools</h4>
+      {protocols.map((protocol) => (
+        <article key={protocol.id} className="protocolRow">
+          <div>
+            <strong>{protocol.label}</strong>
+            <p>{protocol.detail}</p>
+          </div>
+          <span className="stateValue stateValue--unknown">Coming soon</span>
+        </article>
+      ))}
+    </div>
+  );
+}
+
 function AccountStateDetails({
   health,
   checklist,
@@ -772,8 +985,16 @@ function AccountStateDetails({
   walletBusy,
   onConnectWallet,
   onCloseStep,
+  onSetDestination,
+  onTrustlinePlanner,
   onResolveClassicBlocker,
+  onRevokeSponsoredEntry,
+  pendingClassicAction,
+  pendingSponsoredEntryKey,
   trustlinePanel,
+  destination,
+  destOk,
+  reserveReleaseLabel,
   embedded = false,
 }: {
   health: HealthReport;
@@ -782,41 +1003,49 @@ function AccountStateDetails({
   walletBusy: boolean;
   onConnectWallet: () => void;
   onCloseStep: () => void;
+  onSetDestination: () => void;
+  onTrustlinePlanner: () => void;
   onResolveClassicBlocker: (code: BlockerCode) => void;
+  onRevokeSponsoredEntry: (entry: SponsoredLedgerEntry) => void;
+  pendingClassicAction: BlockerCode | null;
+  pendingSponsoredEntryKey: string | null;
   trustlinePanel?: ReactNode;
+  destination: string;
+  destOk: boolean;
+  reserveReleaseLabel: string;
   embedded?: boolean;
 }) {
   const byId = new Map(checklist.map((row) => [row.id, row]));
+  const protocolRowsCount = health.openPositions?.defiProtocols.length ?? 0;
   const groups = [
     {
       id: "unlock-value",
       title: "Unlock value",
-      description: "Reserve release, claimable balances, and token-line cleanup live here.",
+      description: "Estimated reserve release and claimable balances are separated from account-state blockers.",
       rows: [
-        ["Estimated reserve release", byId.get("classic_trustlines")],
+        ["Estimated reserve", byId.get("classic_trustlines")],
         ["Claimable balances", byId.get("classic_claimable_balances")],
-        ["Token-line cleanup opportunities", byId.get("classic_trustlines")],
       ] as Array<[string, HealthChecklistItem | undefined]>,
     },
     {
-      id: "remove-blockers",
-      title: "Remove blockers",
-      description: "Fix the account state that most often prevents cleanup or close.",
+      id: "account-states",
+      title: "Account states",
+      description: "Review sponsorships, approvals, shared control, and account rules that affect cleanup.",
       rows: [
-        ["Trustlines", byId.get("classic_trustlines")],
         ["Sponsorships", byId.get("classic_sponsorship")],
-        ["Open activity", byId.get("classic_open_offers") ?? byId.get("classic_amm_lp_shares")],
-        ["LP positions", byId.get("classic_amm_lp_shares")],
+        ["Allowances", byId.get("soroban_allowances")],
+        ["Account control", byId.get("classic_extra_signers")],
+        ["Thresholds / approval rules", byId.get("classic_thresholds")],
+        ["Data entries", byId.get("classic_data_entries")],
       ] as Array<[string, HealthChecklistItem | undefined]>,
     },
     {
-      id: "review-permissions",
-      title: "Review permissions",
-      description: "Check approvals, control rules, and shared access before write actions.",
+      id: "open-positions",
+      title: "Open offers & DeFi tools",
+      description: "Review market orders, liquidity positions, and protocol-specific exits in one place.",
       rows: [
-        ["Allowances", byId.get("soroban_allowances")],
-        ["Extra signers / shared control", byId.get("classic_extra_signers")],
-        ["Thresholds / approval rules", byId.get("classic_thresholds")],
+        ["Open offers", byId.get("classic_open_offers")],
+        ["Liquidity positions", byId.get("classic_amm_lp_shares")],
       ] as Array<[string, HealthChecklistItem | undefined]>,
     },
     {
@@ -825,12 +1054,10 @@ function AccountStateDetails({
       description: "Confirm destination, manual review, and final readiness before the irreversible step.",
       rows: [
         ["Destination", undefined],
-        ["Manual protocol review", byId.get("defi_positions")],
         ["Close readiness", byId.get("classic_min_reserve")],
       ] as Array<[string, HealthChecklistItem | undefined]>,
     },
   ];
-  const protocols = health.openPositions?.defiProtocols ?? [];
 
   return (
     <section className={embedded ? "snapshotDetails" : "reportSurface"}>
@@ -851,7 +1078,8 @@ function AccountStateDetails({
               </div>
               <span className="stateDetailGroupMeta">
                 <span>
-                  {group.rows.length} item{group.rows.length === 1 ? "" : "s"}
+                  {group.rows.length + (group.id === "open-positions" ? protocolRowsCount : 0)} item
+                  {group.rows.length + (group.id === "open-positions" ? protocolRowsCount : 0) === 1 ? "" : "s"}
                 </span>
                 <span className="stateDetailGroupChevron" aria-hidden>
                   ⌄
@@ -860,30 +1088,70 @@ function AccountStateDetails({
             </summary>
             <div className="stateDetailRows">
               {group.rows.map(([label, row]) => {
-                const copy = scanRowCopy(label, row, health);
+                const copy = scanRowCopy(label, row, health, { reserveReleaseLabel, destination, destOk });
+                if (label === "Estimated reserve") {
+                  return (
+                    <article key={label} className={`scanReportRow scanReportRow--${group.id} scanReportRow--reserve`}>
+                      <div className="scanReportReserveHeader">
+                        <div className="scanReportMain">
+                          <span>{label}</span>
+                          <p>{copy.detail}</p>
+                        </div>
+                        <strong className={`stateValue stateValue--${copy.tone}`}>{copy.value}</strong>
+                      </div>
+                      {trustlinePanel ? (
+                        <div className="scanReportEmbeddedPanel scanReportEmbeddedPanel--inline">{trustlinePanel}</div>
+                      ) : (
+                        <p className="scanReportInlineNote">{row?.detail ?? copy.detail}</p>
+                      )}
+                    </article>
+                  );
+                }
+                if (label === "Sponsorships" && row?.status !== "pass") {
+                  return (
+                    <article key={label} className={`scanReportRow scanReportRow--${group.id} scanReportRow--sponsorships`}>
+                      <div className="scanReportReserveHeader scanReportReserveHeader--sponsorships">
+                        <div className="scanReportMain">
+                          <span>{label}</span>
+                          <p>{copy.detail}</p>
+                        </div>
+                        <strong className={`stateValue stateValue--${copy.tone}`}>{copy.value}</strong>
+                      </div>
+                      <div className="scanReportEmbeddedPanel scanReportEmbeddedPanel--inline">
+                        <SponsorshipRowDetails
+                          health={health}
+                          pending={pendingClassicAction === "SPONSORING_OTHER_ACCOUNTS"}
+                          pendingEntryKey={pendingSponsoredEntryKey}
+                          walletConnected={walletConnected}
+                          walletBusy={walletBusy}
+                          onConnectWallet={onConnectWallet}
+                          onRevokeEntry={onRevokeSponsoredEntry}
+                          showIntro={false}
+                          showTechnical={false}
+                        />
+                      </div>
+                    </article>
+                  );
+                }
                 const action =
                   label === "Destination"
-                    ? { label: "Set destination", onClick: onCloseStep }
-                    : label === "Estimated reserve release"
-                      ? walletConnected
-                        ? { label: "Open trustline planner", onClick: onCloseStep }
-                        : { label: "Connect Wallet", onClick: onConnectWallet }
-                      : label === "Close readiness"
+                    ? { label: destOk ? "Edit destination" : "Save destination", onClick: onSetDestination }
+                    : label === "Close readiness"
                         ? walletConnected
                           ? { label: "Open close flow", onClick: onCloseStep }
                           : { label: "Connect Wallet", onClick: onConnectWallet }
-                        : label === "Token-line cleanup opportunities"
-                          ? { label: "Open trustline planner", onClick: onCloseStep }
-                          : rowActionFor(row, {
+                        : rowActionFor(row, {
                             walletConnected,
                             walletBusy,
                             onConnectWallet,
                             onCloseStep,
+                            onTrustlinePlanner,
                             onResolveClassicBlocker,
+                            pendingClassicAction,
                           });
                 return (
                   <details key={label} className={`scanReportRow scanReportRow--${group.id}`}>
-                    <summary>
+                    <summary className="resultActionRow">
                       <div className="scanReportMain">
                         <span>{label}</span>
                         <p>{copy.detail}</p>
@@ -903,8 +1171,22 @@ function AccountStateDetails({
                       </button>
                     </summary>
                     <div className="scanReportDetails">
-                      <p>{row?.detail ?? copy.detail}</p>
-                      {row ? (
+                      {row?.id === "classic_sponsorship" ? (
+                        <SponsorshipRowDetails
+                          health={health}
+                          pending={pendingClassicAction === "SPONSORING_OTHER_ACCOUNTS"}
+                          pendingEntryKey={pendingSponsoredEntryKey}
+                          walletConnected={walletConnected}
+                          walletBusy={walletBusy}
+                          onConnectWallet={onConnectWallet}
+                          onRevokeEntry={onRevokeSponsoredEntry}
+                        />
+                      ) : row?.id === "classic_extra_signers" || row?.id === "classic_thresholds" ? (
+                        <PermissionRowDetails health={health} row={row} />
+                      ) : (
+                        <p>{row?.detail ?? copy.detail}</p>
+                      )}
+                      {row && row.id !== "classic_sponsorship" ? (
                         <dl>
                           <div>
                             <dt>State</dt>
@@ -924,28 +1206,11 @@ function AccountStateDetails({
                   </details>
                 );
               })}
-              {group.id === "unlock-value" && trustlinePanel ? <div className="scanReportEmbeddedPanel">{trustlinePanel}</div> : null}
+              {group.id === "open-positions" ? <ProtocolReviewRows health={health} /> : null}
             </div>
           </details>
         ))}
       </div>
-
-      {protocols.length > 0 ? (
-        <div className="protocolList">
-          <h3>Manual protocol review</h3>
-          {protocols.map((protocol) => (
-            <article key={protocol.id} className="protocolRow">
-              <div>
-                <strong>{protocol.label}</strong>
-                <p>{protocol.detail}</p>
-              </div>
-              <span className={`stateValue stateValue--${protocol.status}`}>
-                {protocol.status === "pass" ? "Clear" : protocol.status === "fail" ? "Review" : "Manual"}
-              </span>
-            </article>
-          ))}
-        </div>
-      ) : null}
     </section>
   );
 }
@@ -966,9 +1231,14 @@ function AppShell() {
   const [watchlist, setWatchlist] = useState<WatchlistEntry[]>(() => loadWatchlist());
   const [watchlistDraft, setWatchlistDraft] = useState("");
   const [closeConfirm, setCloseConfirm] = useState("");
+  const [destinationModalOpen, setDestinationModalOpen] = useState(false);
+  const [destinationDraft, setDestinationDraft] = useState("");
   const [didAutoloadQueryAccount, setDidAutoloadQueryAccount] = useState(false);
   const [mergeBusy, setMergeBusy] = useState(false);
   const [trustlineSummary, setTrustlineSummary] = useState<TrustlineCleanupSummary | null>(null);
+  const [pendingClassicAction, setPendingClassicAction] = useState<BlockerCode | null>(null);
+  const [pendingSponsoredEntryKey, setPendingSponsoredEntryKey] = useState<string | null>(null);
+  const trustlinePlannerRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     void ensureWalletKit(network);
@@ -1031,6 +1301,8 @@ function AppShell() {
       setError(null);
       setHealth(null);
       setActionSuccess(null);
+      setPendingClassicAction(null);
+      setPendingSponsoredEntryKey(null);
       if (!isValidClassicAddress(trimmed)) {
         setError("Enter a valid classic G-address (56 chars).");
         return null;
@@ -1078,6 +1350,8 @@ function AppShell() {
     setDestination("");
     setCloseConfirm("");
     setTrustlineSummary(null);
+    setPendingClassicAction(null);
+    setPendingSponsoredEntryKey(null);
   }, []);
 
   const refreshHealth = useCallback(async () => {
@@ -1127,6 +1401,7 @@ function AppShell() {
       const id = source.trim();
       if (!health?.horizonUrl || !walletAddress || !isValidClassicAddress(id)) return;
       setWalletBusy(true);
+      setPendingClassicAction(code);
       setWalletError(null);
       setActionSuccess(null);
       try {
@@ -1143,9 +1418,39 @@ function AppShell() {
         setWalletError(formatWalletError(e));
       } finally {
         setWalletBusy(false);
+        setPendingClassicAction(null);
       }
     },
     [health, network, source, walletAddress, refreshHealth, signSubmitClassicBatch],
+  );
+
+  const revokeSponsoredEntry = useCallback(
+    async (entry: SponsoredLedgerEntry) => {
+      const id = source.trim();
+      if (!health?.horizonUrl || !walletAddress || !isValidClassicAddress(id)) return;
+      const key = sponsorshipEntryKey(entry);
+      setWalletBusy(true);
+      setPendingSponsoredEntryKey(key);
+      setWalletError(null);
+      setActionSuccess(null);
+      try {
+        const batch = await buildRevokeSponsorshipEntryXdr({
+          horizonUrl: health.horizonUrl,
+          sponsorAccountId: id,
+          network,
+          entry,
+        });
+        const { hash } = await signSubmitClassicBatch(batch);
+        setActionSuccess(`Sponsorship revoked. Tx ${hash.slice(0, 10)}... Re-run health when Horizon catches up.`);
+        await refreshHealth();
+      } catch (e) {
+        setWalletError(formatWalletError(e));
+      } finally {
+        setWalletBusy(false);
+        setPendingSponsoredEntryKey(null);
+      }
+    },
+    [health?.horizonUrl, network, refreshHealth, signSubmitClassicBatch, source, walletAddress],
   );
 
   const runAccountMerge = useCallback(async () => {
@@ -1293,18 +1598,93 @@ function AppShell() {
   const accountStateLabel = !health ? "Awaiting scan" : health.canDemolish ? "Ready" : blocking.length > 0 ? "Needs cleanup" : "Needs review";
   const reserveReleaseLabel =
     typeof trustlineReserveXlm === "number" ? formatXlmCompact(trustlineReserveXlm) : "Not estimated yet";
+  const nativeBalanceLabel =
+    typeof health?.nativeBalanceXlm === "number" ? formatXlmCompact(health.nativeBalanceXlm) : "Balance unavailable";
   const trustlineStateLabel =
     trustlineSummary
       ? `${trustlineSummary.total} token line${trustlineSummary.total === 1 ? "" : "s"}`
       : checklistById.get("classic_trustlines")?.status === "pass"
         ? "None detected"
         : "Needs cleanup";
-  const manualReviewStateLabel =
-    protocolReviewCount === 0
-      ? "No manual review flags"
-      : `${protocolReviewCount} item${protocolReviewCount === 1 ? "" : "s"} to review`;
-  const permissionStateLabel = permissionReviewCount === 0 ? "Clear" : `${permissionReviewCount} review${permissionReviewCount === 1 ? "" : "s"}`;
   const destinationStateLabel = destOk ? "Set" : "Missing";
+  const reviewBeforeCloseCount = permissionReviewCount + protocolReviewCount + (destOk ? 0 : 1);
+  const manualReviewStateLabel =
+    reviewBeforeCloseCount === 0
+      ? "No review flags"
+      : `${reviewBeforeCloseCount} item${reviewBeforeCloseCount === 1 ? "" : "s"} to review`;
+  const closeReadinessLabel =
+    health?.canDemolish && destOk
+      ? "Ready to close"
+      : !destOk
+        ? "Destination missing"
+        : blocking.length > 0
+          ? "Cleanup first"
+          : "Review first";
+  const compactTrustlineCount = trustlineSummary?.total ?? (trustlineChecklistRow?.status === "pass" ? 0 : 1);
+  const focusTrustlinePlanner = useCallback(() => {
+    setActiveSection("scan");
+    window.requestAnimationFrame(() => {
+      trustlinePlannerRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+      const firstToken = trustlinePlannerRef.current?.querySelector("details.trustlineToken") as HTMLDetailsElement | null;
+      if (firstToken) firstToken.open = true;
+    });
+  }, []);
+
+  const openDestinationModal = useCallback(() => {
+    setDestinationDraft(destination);
+    setDestinationModalOpen(true);
+  }, [destination]);
+
+  const saveDestinationFromModal = useCallback(() => {
+    const trimmed = destinationDraft.trim();
+    if (!isValidClassicAddress(trimmed)) return;
+    setDestination(trimmed);
+    setDestinationModalOpen(false);
+  }, [destinationDraft]);
+
+  const sponsorshipNeedsAction = checklistById.get("classic_sponsorship")?.status === "fail";
+  const nextBestAction = !health
+    ? null
+    : trustlineChecklistRow?.status === "fail" || (trustlineSummary?.total ?? 0) > 0
+      ? {
+          eyebrow: "Next best action",
+          title: `Resolve ${compactTrustlineCount} token line${compactTrustlineCount === 1 ? "" : "s"}`,
+          body: `Unlock approximately ${reserveReleaseLabel} by clearing funded trustlines first.`,
+          actionLabel: "Review trustlines",
+          tone: "value",
+          onClick: focusTrustlinePlanner,
+        }
+      : sponsorshipNeedsAction
+        ? {
+            eyebrow: "Next best action",
+            title: "Revoke sponsored reserves",
+            body: "This account is paying reserve for sponsored ledger entries that must be cleared before close.",
+            actionLabel: "Review sponsorships",
+            tone: "state",
+            onClick: () => {
+              setActiveSection("scan");
+              window.requestAnimationFrame(() => {
+                document.querySelector(".stateDetailGroup--account-states")?.scrollIntoView({ behavior: "smooth", block: "start" });
+              });
+            },
+          }
+        : !destOk
+          ? {
+              eyebrow: "Next best action",
+              title: "Save destination address",
+              body: "Close flow needs a verified destination before final wallet approval.",
+              actionLabel: "Save destination",
+              tone: "close",
+              onClick: openDestinationModal,
+            }
+          : {
+              eyebrow: "Next best action",
+              title: "Review final close flow",
+              body: "Required cleanup is clear enough to move into destination and irreversible-close review.",
+              actionLabel: "Open close flow",
+              tone: "close",
+              onClick: () => setActiveSection("close"),
+            };
 
   return (
     <div className="page page--app">
@@ -1456,22 +1836,39 @@ function AppShell() {
                     <div className="sectionHeaderRow sectionHeaderRow--compact">
                       <div>
                         <h2 className="cardTitle">Account health snapshot</h2>
-                        <p className={`summary ${health.canDemolish ? "ok" : "warn"}`}>{health.summary}</p>
+                        <div className={`snapshotStatusStrip ${health.canDemolish ? "snapshotStatusStrip--ok" : "snapshotStatusStrip--warn"}`}>
+                          <span>
+                            {blocking.length} blocker{blocking.length === 1 ? "" : "s"}
+                          </span>
+                          <span>
+                            {compactTrustlineCount} token line{compactTrustlineCount === 1 ? "" : "s"}
+                          </span>
+                          <span>Destination {destinationStateLabel.toLowerCase()}</span>
+                        </div>
                       </div>
                     </div>
 
                     <div className="snapshotBandGrid">
                       <article className="snapshotBand snapshotBand--state">
-                        <span className="snapshotEyebrow">Account state</span>
-                        <strong className="snapshotValue">{accountStateLabel}</strong>
-                        <p className="snapshotSentence">{health.summary}</p>
+                        <span className="snapshotEyebrow">Cleanup blockers</span>
+                        <strong className="snapshotValue">
+                          {blocking.length > 0 ? `${blocking.length} blocker${blocking.length === 1 ? "" : "s"}` : accountStateLabel}
+                        </strong>
+                        <p className="snapshotSentence">
+                          {blocking.length > 0
+                            ? blocking
+                                .slice(0, 2)
+                                .map((blocker) => blocker.title)
+                                .join(", ")
+                            : "No required cleanup blockers were returned by the latest scan."}
+                        </p>
                         <div className="snapshotList">
                           <div>
-                            <span>Why it matters</span>
-                            <strong>{blocking.length > 0 ? `${blocking.length} blocker${blocking.length === 1 ? "" : "s"}` : "No required blockers"}</strong>
+                            <span>Balance</span>
+                            <strong>{nativeBalanceLabel}</strong>
                           </div>
                           <div>
-                            <span>Open activity</span>
+                            <span>Open positions</span>
                             <strong>{openPositionCount > 0 ? `${openPositionCount} item${openPositionCount === 1 ? "" : "s"}` : "None detected"}</strong>
                           </div>
                         </div>
@@ -1496,13 +1893,15 @@ function AppShell() {
                         </div>
                       </article>
                       <article className="snapshotBand snapshotBand--review">
-                        <span className="snapshotEyebrow">Manual review</span>
-                        <strong className="snapshotValue">{manualReviewStateLabel}</strong>
-                        <p className="snapshotSentence">Review permissions, shared control, and destination details before final close.</p>
+                        <span className="snapshotEyebrow">Close readiness</span>
+                        <strong className="snapshotValue">{closeReadinessLabel}</strong>
+                        <p className="snapshotSentence">
+                          Final close stays unavailable until cleanup blockers are resolved and a destination is set.
+                        </p>
                         <div className="snapshotList">
                           <div>
-                            <span>Permissions review</span>
-                            <strong>{permissionStateLabel}</strong>
+                            <span>Review checks</span>
+                            <strong>{manualReviewStateLabel}</strong>
                           </div>
                           <div>
                             <span>Destination status</span>
@@ -1513,6 +1912,19 @@ function AppShell() {
                     </div>
                   </section>
 
+                  {nextBestAction ? (
+                    <section className={`nextActionStrip nextActionStrip--${nextBestAction.tone}`}>
+                      <div>
+                        <span>{nextBestAction.eyebrow}</span>
+                        <strong>{nextBestAction.title}</strong>
+                        <p>{nextBestAction.body}</p>
+                      </div>
+                      <button type="button" className="btn primary" onClick={nextBestAction.onClick}>
+                        {nextBestAction.actionLabel}
+                      </button>
+                    </section>
+                  ) : null}
+
                   <AccountStateDetails
                     embedded
                     health={health}
@@ -1521,26 +1933,39 @@ function AppShell() {
                     walletBusy={walletBusy}
                     onConnectWallet={connectWallet}
                     onCloseStep={() => setActiveSection("close")}
+                    onSetDestination={openDestinationModal}
+                    onTrustlinePlanner={focusTrustlinePlanner}
                     onResolveClassicBlocker={(code) => {
                       void resolveClassicBlocker(code);
                     }}
+                    onRevokeSponsoredEntry={(entry) => {
+                      void revokeSponsoredEntry(entry);
+                    }}
+                    pendingClassicAction={pendingClassicAction}
+                    pendingSponsoredEntryKey={pendingSponsoredEntryKey}
+                    destination={destination}
+                    destOk={destOk}
+                    reserveReleaseLabel={reserveReleaseLabel}
                     trustlinePanel={
                       showTrustlineTeardown && health.horizonUrl ? (
-                        <TrustlineTeardownCard
-                          embedded
-                          accountId={sourceTrim}
-                          network={network}
-                          horizonUrl={health.horizonUrl}
-                          walletAddress={walletAddress}
-                          walletMismatch={Boolean(walletMismatch)}
-                          walletBusy={walletBusy}
-                          setWalletBusy={setWalletBusy}
-                          setWalletError={setWalletError}
-                          setActionSuccess={setActionSuccess}
-                          offersBlocked={checklistById.get("classic_open_offers")?.status === "fail"}
-                          onSummaryChange={setTrustlineSummary}
-                          onSubmitted={refreshHealth}
-                        />
+                        <div ref={trustlinePlannerRef} className="trustlinePlannerAnchor">
+                          <TrustlineTeardownCard
+                            embedded
+                            inlineList
+                            accountId={sourceTrim}
+                            network={network}
+                            horizonUrl={health.horizonUrl}
+                            walletAddress={walletAddress}
+                            walletMismatch={Boolean(walletMismatch)}
+                            walletBusy={walletBusy}
+                            setWalletBusy={setWalletBusy}
+                            setWalletError={setWalletError}
+                            setActionSuccess={setActionSuccess}
+                            offersBlocked={checklistById.get("classic_open_offers")?.status === "fail"}
+                            onSummaryChange={setTrustlineSummary}
+                            onSubmitted={refreshHealth}
+                          />
+                        </div>
                       ) : undefined
                     }
                   />
@@ -1915,6 +2340,58 @@ function AppShell() {
           ) : null}
         </section>
       </main>
+      {destinationModalOpen ? (
+        <div
+          className="destinationModalOverlay"
+          role="presentation"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) setDestinationModalOpen(false);
+          }}
+        >
+          <section className="destinationModal" role="dialog" aria-modal="true" aria-labelledby="destination-modal-title">
+            <div>
+              <span className="modalKicker">Close safely</span>
+              <h2 id="destination-modal-title">Save destination address</h2>
+              <p>
+                This is where native XLM will be sent if you later approve the final account close. You can edit it before
+                signing.
+              </p>
+            </div>
+            <label className="label" htmlFor="destination-modal-input">
+              Destination Stellar address
+            </label>
+            <input
+              id="destination-modal-input"
+              className="input"
+              placeholder="G..."
+              value={destinationDraft}
+              onChange={(event) => setDestinationDraft(event.target.value)}
+              spellCheck={false}
+              autoCapitalize="none"
+              autoFocus
+            />
+            {destinationDraft.trim() && !isValidClassicAddress(destinationDraft.trim()) ? (
+              <p className="error">Enter a valid classic G-address.</p>
+            ) : null}
+            {destOk && destination.trim() ? (
+              <p className="destinationModalSaved">Current saved destination: {formatAccount(destination.trim())}</p>
+            ) : null}
+            <div className="destinationModalActions">
+              <button type="button" className="btn secondary" onClick={() => setDestinationModalOpen(false)}>
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="btn primary"
+                disabled={!isValidClassicAddress(destinationDraft.trim())}
+                onClick={saveDestinationFromModal}
+              >
+                Save destination
+              </button>
+            </div>
+          </section>
+        </div>
+      ) : null}
     </div>
   );
 }

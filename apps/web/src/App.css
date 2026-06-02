@@ -1972,6 +1972,7 @@
 
 .snapshotList {
   display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 0.65rem;
 }
 
@@ -2138,7 +2139,7 @@
   transition: transform 160ms ease;
 }
 
-.stateDetailGroup[open] .stateDetailGroupChevron {
+.stateDetailGroup[open] > .stateDetailGroupSummary .stateDetailGroupChevron {
   transform: rotate(180deg);
 }
 
@@ -3106,10 +3107,10 @@ code {
 
 .trustlineTokenSummary {
   display: grid;
-  grid-template-columns: minmax(0, 1.2fr) minmax(0, 1.3fr) auto auto;
+  grid-template-columns: minmax(13rem, 22rem) minmax(12rem, 16rem) minmax(18rem, 1fr) max-content;
   align-items: center;
-  gap: 1rem;
-  padding: 1rem 1.05rem;
+  gap: 1.35rem;
+  padding: 1.15rem 1.45rem;
   cursor: pointer;
   list-style: none;
 }
@@ -3119,8 +3120,10 @@ code {
 }
 
 .trustlineTokenIdentity {
+  grid-column: 1;
   display: grid;
   gap: 0.18rem;
+  min-width: 0;
 }
 
 .trustlineTokenIdentity strong {
@@ -3134,10 +3137,11 @@ code {
 }
 
 .trustlineTokenMeta {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.55rem;
-  align-items: center;
+  grid-column: 3;
+  display: grid;
+  justify-items: start;
+  gap: 0.32rem;
+  min-width: 0;
 }
 
 .trustlineReserveHint {
@@ -3146,11 +3150,19 @@ code {
   line-height: 1.4;
 }
 
+.trustlineNextStep {
+  color: #1e5bd8;
+  font-size: 0.77rem;
+  font-weight: 750;
+}
+
 .trustlineTokenBalance {
+  grid-column: 2;
   display: grid;
-  justify-items: end;
+  justify-items: start;
   gap: 0.12rem;
-  text-align: right;
+  min-width: 0;
+  text-align: left;
 }
 
 .trustlineTokenBalance span {
@@ -3161,12 +3173,36 @@ code {
 .trustlineTokenBalance strong {
   font-size: 0.98rem;
   letter-spacing: -0.01em;
+  word-break: break-word;
+}
+
+.trustlineTokenActionMeta {
+  grid-column: 4;
+  display: inline-flex;
+  width: max-content;
+  justify-self: end;
+  align-self: center;
+  gap: 0.45rem;
+  white-space: nowrap;
 }
 
 .trustlineTokenBody {
   display: grid;
-  gap: 0.95rem;
+  gap: 0.72rem;
   padding: 0 1.05rem 1.05rem;
+}
+
+.trustlineStepTitle {
+  margin: 0;
+  color: #0f172a;
+  font-size: 0.82rem;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+}
+
+.trustlineStepTitle--inline {
+  align-self: center;
+  margin-right: auto;
 }
 
 .trustlineFacts {
@@ -3233,6 +3269,7 @@ code {
   flex-wrap: wrap;
   gap: 0.65rem;
   align-items: center;
+  padding-top: 0.15rem;
 }
 
 .trustlineActions {
@@ -3444,9 +3481,20 @@ code {
     justify-items: start;
   }
 
+  .trustlineTokenIdentity,
+  .trustlineTokenBalance,
+  .trustlineTokenMeta,
+  .trustlineTokenActionMeta {
+    grid-column: auto;
+  }
+
   .trustlineTokenBalance {
     justify-items: start;
     text-align: left;
+  }
+
+  .trustlineTokenActionMeta {
+    justify-self: start;
   }
 
   .trustlineFacts {
@@ -3900,13 +3948,16 @@ body {
 .page--app .workspace {
   width: 100%;
   max-width: none;
+  height: 100dvh;
   min-height: 100dvh;
   margin: 0;
   padding: 0;
+  overflow: hidden;
 }
 
 .workspace--shell {
   width: 100%;
+  height: 100dvh;
   min-height: 100dvh;
   margin: 0;
   padding: 0;
@@ -3919,7 +3970,9 @@ body {
 .consoleSidebar {
   position: sticky;
   top: 0;
+  height: 100dvh;
   min-height: 100dvh;
+  overflow: hidden;
   padding: 0;
   border-radius: 0;
   border-width: 0 1px 0 0;
@@ -4042,7 +4095,10 @@ body {
   --shadow: 0 24px 70px rgba(15, 23, 42, 0.08);
   gap: 1rem;
   min-width: 0;
+  height: 100dvh;
   min-height: 100dvh;
+  overflow-y: auto;
+  overscroll-behavior: contain;
   padding: 1rem 1.5rem 1.5rem;
   border-radius: 0;
   border: 0;
@@ -4315,8 +4371,40 @@ body {
 }
 
 .snapshotBandGrid {
-  grid-template-columns: minmax(0, 1.1fr) repeat(2, minmax(0, 1fr));
+  grid-template-columns: minmax(0, 1.18fr) minmax(0, 1fr) minmax(0, 0.92fr);
   gap: 0.85rem;
+}
+
+.snapshotStatusStrip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  margin-top: 0.45rem;
+}
+
+.snapshotStatusStrip span {
+  display: inline-flex;
+  align-items: center;
+  min-height: 1.65rem;
+  padding: 0 0.62rem;
+  border-radius: 999px;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  background: #fff;
+  color: #334155;
+  font-size: 0.74rem;
+  font-weight: 700;
+}
+
+.snapshotStatusStrip--warn span:first-child {
+  border-color: rgba(180, 83, 9, 0.22);
+  background: #fff7ed;
+  color: #9a3412;
+}
+
+.snapshotStatusStrip--ok span:first-child {
+  border-color: rgba(21, 128, 61, 0.22);
+  background: #ecfdf5;
+  color: #166534;
 }
 
 .snapshotBand {
@@ -4359,13 +4447,16 @@ body {
 }
 
 .snapshotBand--value .snapshotEyebrow,
-.stateDetailGroup--remove-blockers .stateDetailGroupHeading h3 {
+.stateDetailGroup--account-states .stateDetailGroupHeading h3 {
   color: var(--emerald);
 }
 
-.snapshotBand--review .snapshotEyebrow,
-.stateDetailGroup--review-permissions .stateDetailGroupHeading h3 {
+.snapshotBand--review .snapshotEyebrow {
   color: var(--amber);
+}
+
+.stateDetailGroup--open-positions .stateDetailGroupHeading h3 {
+  color: var(--cyan);
 }
 
 .stateDetailGroup--close-safely .stateDetailGroupHeading h3 {
@@ -4373,7 +4464,7 @@ body {
 }
 
 .snapshotValue {
-  font-size: 1.65rem;
+  font-size: 1.52rem;
   line-height: 1.02;
 }
 
@@ -4404,14 +4495,19 @@ body {
   box-shadow: inset 0 0 0 1px rgba(113, 146, 219, 0.07);
 }
 
-.stateDetailGroup--remove-blockers,
-.scanReportRow--remove-blockers {
+.stateDetailGroup--account-states,
+.scanReportRow--account-states {
   box-shadow: inset 0 0 0 1px rgba(109, 188, 156, 0.07);
 }
 
 .stateDetailGroup--review-permissions,
 .scanReportRow--review-permissions {
   box-shadow: inset 0 0 0 1px rgba(193, 154, 98, 0.07);
+}
+
+.stateDetailGroup--open-positions,
+.scanReportRow--open-positions {
+  box-shadow: inset 0 0 0 1px rgba(8, 145, 178, 0.07);
 }
 
 .stateDetailGroup--close-safely,
@@ -4428,12 +4524,16 @@ body {
   border-color: rgba(113, 146, 219, 0.18);
 }
 
-.stateDetailGroup--remove-blockers[open] {
+.stateDetailGroup--account-states[open] {
   border-color: rgba(109, 188, 156, 0.18);
 }
 
 .stateDetailGroup--review-permissions[open] {
   border-color: rgba(193, 154, 98, 0.18);
+}
+
+.stateDetailGroup--open-positions[open] {
+  border-color: rgba(8, 145, 178, 0.2);
 }
 
 .stateDetailGroup--close-safely[open] {
@@ -4461,12 +4561,16 @@ body {
   border-left: 2px solid rgba(113, 146, 219, 0.34);
 }
 
-.scanReportRow--remove-blockers summary {
+.scanReportRow--account-states summary {
   border-left: 2px solid rgba(109, 188, 156, 0.34);
 }
 
 .scanReportRow--review-permissions summary {
   border-left: 2px solid rgba(193, 154, 98, 0.34);
+}
+
+.scanReportRow--open-positions summary {
+  border-left: 2px solid rgba(8, 145, 178, 0.34);
 }
 
 .scanReportRow--close-safely summary {
@@ -4478,6 +4582,327 @@ body {
     linear-gradient(180deg, rgba(255, 255, 255, 0.99), rgba(250, 252, 255, 0.98)),
     #fff;
   border-color: rgba(79, 140, 255, 0.18);
+}
+
+.resultActionRow {
+  position: relative;
+}
+
+.resultActionRow--value::before,
+.resultActionRow--state::before {
+  content: "";
+  position: absolute;
+  inset-block: 0;
+  left: 0;
+  width: 3px;
+  background: linear-gradient(180deg, rgba(47, 111, 232, 0.72), rgba(8, 145, 178, 0.35));
+}
+
+.resultActionRow--state::before {
+  background: linear-gradient(180deg, rgba(34, 197, 94, 0.58), rgba(20, 184, 166, 0.3));
+}
+
+.scanReportRow--reserve {
+  display: grid;
+  gap: 0;
+}
+
+.nextActionStrip {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 1rem;
+  align-items: center;
+  padding: 1rem 1.1rem;
+  border-radius: 1rem;
+  border: 1px solid rgba(47, 111, 232, 0.16);
+  background:
+    radial-gradient(circle at 8% 20%, rgba(47, 111, 232, 0.12), transparent 28%),
+    linear-gradient(135deg, rgba(255, 255, 255, 0.98), rgba(241, 247, 255, 0.96));
+  box-shadow: 0 18px 42px rgba(15, 23, 42, 0.07);
+}
+
+.nextActionStrip span {
+  display: block;
+  margin-bottom: 0.18rem;
+  color: #1e5bd8;
+  font-size: 0.72rem;
+  font-weight: 820;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.nextActionStrip strong {
+  display: block;
+  color: #0f172a;
+  font-size: 1.05rem;
+  line-height: 1.18;
+}
+
+.nextActionStrip p {
+  margin: 0.25rem 0 0;
+  color: #475569;
+  font-size: 0.9rem;
+  line-height: 1.45;
+}
+
+.nextActionStrip--state {
+  border-color: rgba(34, 197, 94, 0.2);
+  background:
+    radial-gradient(circle at 8% 20%, rgba(34, 197, 94, 0.12), transparent 28%),
+    linear-gradient(135deg, rgba(255, 255, 255, 0.98), rgba(240, 253, 244, 0.96));
+}
+
+.nextActionStrip--state span {
+  color: #15803d;
+}
+
+.nextActionStrip--close {
+  border-color: rgba(194, 65, 90, 0.2);
+  background:
+    radial-gradient(circle at 8% 20%, rgba(194, 65, 90, 0.11), transparent 28%),
+    linear-gradient(135deg, rgba(255, 255, 255, 0.98), rgba(255, 247, 237, 0.98));
+}
+
+.nextActionStrip--close span {
+  color: #b45309;
+}
+
+.scanReportReserveHeader {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0.85rem;
+  align-items: start;
+  padding: 0.95rem 1rem;
+  border-left: 2px solid rgba(113, 146, 219, 0.34);
+}
+
+.scanReportReserveHeader--sponsorships {
+  border-left-color: rgba(109, 188, 156, 0.34);
+}
+
+.scanReportEmbeddedPanel--inline {
+  padding: 0 1rem 1rem;
+}
+
+.scanReportInlineNote {
+  margin: 0;
+  padding: 0 1rem 1rem;
+  color: #475569;
+  font-size: 0.9rem;
+  line-height: 1.55;
+}
+
+.trustlineEmbedded--inline {
+  padding-top: 0;
+}
+
+.destinationModalOverlay {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: grid;
+  place-items: center;
+  padding: 1.5rem;
+  background: rgba(15, 23, 42, 0.42);
+  backdrop-filter: blur(12px);
+}
+
+.destinationModal {
+  width: min(100%, 34rem);
+  display: grid;
+  gap: 1rem;
+  padding: 1.25rem;
+  border-radius: 1rem;
+  border: 1px solid rgba(15, 23, 42, 0.12);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.99), rgba(248, 250, 252, 0.98)),
+    #fff;
+  box-shadow: 0 28px 70px rgba(15, 23, 42, 0.24);
+}
+
+.destinationModal h2 {
+  margin: 0.15rem 0 0;
+  color: #0f172a;
+  font-size: 1.35rem;
+  line-height: 1.12;
+}
+
+.destinationModal p {
+  margin: 0.45rem 0 0;
+  color: #475569;
+  font-size: 0.92rem;
+  line-height: 1.55;
+}
+
+.modalKicker {
+  color: #b45309;
+  font-size: 0.72rem;
+  font-weight: 780;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.destinationModalSaved {
+  padding: 0.7rem 0.8rem;
+  border-radius: 0.7rem;
+  border: 1px solid rgba(21, 128, 61, 0.18);
+  background: #ecfdf5;
+  color: #166534 !important;
+}
+
+.destinationModalActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.7rem;
+}
+
+.scanInsightBlock {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.actionProgressNote {
+  margin: 0;
+  padding: 0.75rem 0.85rem;
+  border-radius: 0.65rem;
+  border: 1px solid rgba(47, 111, 232, 0.18);
+  background: #eff6ff;
+  color: #1e40af !important;
+  font-weight: 700;
+}
+
+.sponsorshipEntryList {
+  display: grid;
+  gap: 0.55rem;
+  padding: 0.7rem;
+  border-radius: 0.75rem;
+  border: 1px solid rgba(180, 83, 9, 0.14);
+  background: #fffaf5;
+}
+
+.sponsorshipEntryListHeader {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.75rem;
+  align-items: center;
+}
+
+.sponsorshipEntryListHeader strong {
+  color: #0f172a;
+}
+
+.sponsorshipEntryListHeader span,
+.sponsorshipEntry small {
+  color: #64748b;
+  font-size: 0.75rem;
+}
+
+.sponsorshipEntry {
+  display: grid;
+  grid-template-columns: minmax(6rem, auto) minmax(16rem, 1.5fr) minmax(9rem, 0.7fr) auto;
+  gap: 1rem;
+  align-items: center;
+  padding: 0.85rem 0.9rem;
+  border-radius: 0.65rem;
+  border: 1px solid rgba(180, 83, 9, 0.12);
+  background: #ffffff;
+}
+
+.sponsorshipEntry .stateValue {
+  text-transform: capitalize;
+}
+
+.sponsorshipEntry strong {
+  display: block;
+  color: #0f172a;
+}
+
+.sponsorshipEntryMain {
+  min-width: 0;
+}
+
+.sponsorshipEntry p {
+  margin: 0.1rem 0 0;
+  color: #475569 !important;
+}
+
+.sponsorshipEntryReserve {
+  display: grid;
+  gap: 0.12rem;
+  min-width: 0;
+}
+
+.sponsorshipEntryReserve span {
+  color: #64748b;
+  font-size: 0.73rem;
+  font-weight: 650;
+}
+
+.sponsorshipEntryReserve strong {
+  color: #0f172a;
+  font-size: 0.9rem;
+}
+
+.sponsorshipEntryAction {
+  min-width: 6.5rem;
+  min-height: 2.45rem;
+  justify-content: center;
+}
+
+.authorityGrid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.6rem;
+}
+
+.authorityGrid > div,
+.signerList li {
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  border-radius: 0.65rem;
+  background: #ffffff;
+  padding: 0.68rem 0.75rem;
+}
+
+.authorityGrid dt {
+  color: #64748b;
+  font-size: 0.72rem;
+}
+
+.authorityGrid dd {
+  margin: 0.18rem 0 0;
+  color: #0f172a;
+  font-weight: 750;
+}
+
+.signerList {
+  display: grid;
+  gap: 0.45rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.signerList li {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.75rem;
+  align-items: center;
+}
+
+.protocolReviewStack {
+  display: grid;
+  gap: 0.55rem;
+  margin-top: 0.8rem;
+}
+
+.protocolReviewStack h4 {
+  margin: 0;
+  color: #0f172a;
+  font-size: 0.9rem;
+}
+
+.trustlinePlannerAnchor {
+  scroll-margin-top: 1rem;
 }
 
 .scanReportMain span,
@@ -4590,12 +5015,65 @@ body {
     #fff;
 }
 
+.consoleContent .snapshotBand--state {
+  border-color: rgba(47, 111, 232, 0.14);
+  background:
+    radial-gradient(circle at 8% 0%, rgba(47, 111, 232, 0.1), transparent 35%),
+    linear-gradient(180deg, #ffffff, #fbfdff);
+}
+
+.consoleContent .snapshotBand--value {
+  border-color: rgba(34, 197, 94, 0.18);
+  background:
+    radial-gradient(circle at 8% 0%, rgba(34, 197, 94, 0.12), transparent 35%),
+    linear-gradient(180deg, #ffffff, #f8fdfb);
+  box-shadow:
+    0 1px 0 rgba(34, 197, 94, 0.08),
+    0 18px 42px rgba(21, 128, 61, 0.07);
+}
+
+.consoleContent .snapshotBand--value .snapshotValue {
+  font-size: 1.86rem;
+  letter-spacing: -0.03em;
+}
+
+.consoleContent .snapshotBand--review {
+  border-color: rgba(194, 65, 90, 0.16);
+  background:
+    radial-gradient(circle at 8% 0%, rgba(194, 65, 90, 0.1), transparent 35%),
+    linear-gradient(180deg, #ffffff, #fffaf7);
+}
+
 .consoleContent .stateDetailGroup {
   border-color: rgba(15, 23, 42, 0.1);
   background: #ffffff;
   box-shadow:
     0 1px 2px rgba(15, 23, 42, 0.045),
     0 10px 24px rgba(15, 23, 42, 0.035);
+}
+
+.consoleContent .stateDetailGroup--unlock-value {
+  background:
+    radial-gradient(circle at 5% 0%, rgba(47, 111, 232, 0.08), transparent 24%),
+    #ffffff;
+}
+
+.consoleContent .stateDetailGroup--account-states {
+  background:
+    radial-gradient(circle at 5% 0%, rgba(34, 197, 94, 0.08), transparent 24%),
+    #ffffff;
+}
+
+.consoleContent .stateDetailGroup--open-positions {
+  background:
+    radial-gradient(circle at 5% 0%, rgba(8, 145, 178, 0.08), transparent 24%),
+    #ffffff;
+}
+
+.consoleContent .stateDetailGroup--close-safely {
+  background:
+    radial-gradient(circle at 5% 0%, rgba(194, 65, 90, 0.08), transparent 24%),
+    #ffffff;
 }
 
 .consoleContent .stateDetailGroupSummary {
@@ -4634,14 +5112,36 @@ body {
   box-shadow: 0 8px 18px rgba(15, 23, 42, 0.12);
 }
 
-.consoleContent .stateDetailGroup[open] .stateDetailGroupChevron {
+.consoleContent .stateDetailGroup[open] > .stateDetailGroupSummary .stateDetailGroupChevron {
   background: #2f6fe8;
+}
+
+.trustlineToken[open] > .trustlineTokenSummary .stateDetailGroupChevron {
+  transform: rotate(180deg);
 }
 
 .consoleContent .scanReportRow {
   border-color: rgba(15, 23, 42, 0.1);
   background: #ffffff;
   box-shadow: 0 8px 18px rgba(15, 23, 42, 0.035);
+}
+
+.consoleContent .scanReportRow--reserve,
+.consoleContent .scanReportRow--sponsorships {
+  border-color: rgba(47, 111, 232, 0.16);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.995), rgba(247, 250, 255, 0.98)),
+    #ffffff;
+  box-shadow:
+    0 1px 0 rgba(47, 111, 232, 0.08),
+    0 16px 36px rgba(15, 23, 42, 0.055);
+}
+
+.consoleContent .scanReportRow--sponsorships {
+  border-color: rgba(34, 197, 94, 0.18);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.995), rgba(244, 253, 248, 0.98)),
+    #ffffff;
 }
 
 .consoleContent .scanReportRow[open] {
@@ -4743,6 +5243,28 @@ body {
 .consoleContent .trustlineFact span,
 .consoleContent .trustlinePlannerHint {
   color: #64748b;
+}
+
+.consoleContent .trustlineTokenSummary {
+  grid-template-columns: 15rem 13rem minmax(18rem, 1fr) max-content !important;
+  gap: 1rem !important;
+  align-items: center;
+}
+
+.consoleContent .trustlineTokenIdentity {
+  grid-column: 1;
+}
+
+.consoleContent .trustlineTokenBalance {
+  grid-column: 2;
+}
+
+.consoleContent .trustlineTokenMeta {
+  grid-column: 3;
+}
+
+.consoleContent .trustlineTokenActionMeta {
+  grid-column: 4;
 }
 
 .consoleContent .trustlineFact,
@@ -5013,6 +5535,13 @@ body {
 }
 
 @media (max-width: 1100px) {
+  .page--app .workspace,
+  .workspace--shell {
+    height: auto;
+    min-height: 100dvh;
+    overflow: visible;
+  }
+
   .workspace--shell {
     grid-template-columns: 1fr;
   }
@@ -5020,12 +5549,16 @@ body {
   .consoleSidebar {
     position: relative;
     top: 0;
+    height: auto;
     min-height: auto;
+    overflow: visible;
     padding: 0.75rem;
   }
 
   .consoleContent {
+    height: auto;
     min-height: auto;
+    overflow: visible;
     padding: 0.85rem;
     box-shadow: inset 0 1px 0 rgba(15, 23, 42, 0.07);
   }
@@ -5117,6 +5650,14 @@ body {
     gap: 0.65rem;
   }
 
+  .snapshotList {
+    grid-template-columns: 1fr;
+  }
+
+  .authorityGrid {
+    grid-template-columns: 1fr 1fr;
+  }
+
   .stateDetailGroupSummary,
   .scanReportRow summary {
     padding: 0.85rem 0.9rem;
@@ -5124,6 +5665,17 @@ body {
 
   .stateDetailRows {
     padding: 0 0.9rem 0.9rem;
+  }
+
+  .consoleContent .trustlineTokenSummary {
+    grid-template-columns: 1fr !important;
+  }
+
+  .consoleContent .trustlineTokenIdentity,
+  .consoleContent .trustlineTokenBalance,
+  .consoleContent .trustlineTokenMeta,
+  .consoleContent .trustlineTokenActionMeta {
+    grid-column: auto;
   }
 
   .closeReviewGrid {
@@ -5168,6 +5720,24 @@ body {
 
   .sidebarBottom {
     display: none;
+  }
+
+  .authorityGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .signerList li {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .sponsorshipEntry {
+    grid-template-columns: 1fr;
+    align-items: stretch;
+  }
+
+  .sponsorshipEntryAction {
+    width: 100%;
   }
 
   .consoleTopbar {

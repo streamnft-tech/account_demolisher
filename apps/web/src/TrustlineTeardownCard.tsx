@@ -56,6 +56,7 @@ export function TrustlineTeardownCard(props: {
   onSummaryChange?: (summary: TrustlineCleanupSummary) => void;
   onSubmitted: () => Promise<void>;
   embedded?: boolean;
+  inlineList?: boolean;
 }) {
   const {
     accountId,
@@ -71,6 +72,7 @@ export function TrustlineTeardownCard(props: {
     onSummaryChange,
     onSubmitted,
     embedded = false,
+    inlineList = false,
   } = props;
 
   const [rows, setRows] = useState<CreditTrustlineRow[]>([]);
@@ -414,32 +416,38 @@ export function TrustlineTeardownCard(props: {
 
   if (rows.length === 0 && !loadErr) {
     return (
-      <div className={embedded ? "trustlineEmbedded trustlineEmbedded--empty" : "card trustlineCard"}>
-        <div className="sectionHeaderRow">
-          <div>
-            <h2 className={embedded ? "trustlineEmbeddedTitle" : "cardTitle"}>
-              {embedded ? "Per-token cleanup planner" : "Trustlines and offers"}
-            </h2>
-            <p className="hint">No funded credit lines were returned by the latest scan.</p>
+      <div className={embedded ? `trustlineEmbedded trustlineEmbedded--empty${inlineList ? " trustlineEmbedded--inline" : ""}` : "card trustlineCard"}>
+        {!inlineList ? (
+          <div className="sectionHeaderRow">
+            <div>
+              <h2 className={embedded ? "trustlineEmbeddedTitle" : "cardTitle"}>
+                {embedded ? "Per-token cleanup planner" : "Trustlines and offers"}
+              </h2>
+              <p className="hint">No funded credit lines were returned by the latest scan.</p>
+            </div>
           </div>
-        </div>
+        ) : (
+          <p className="hint">No funded credit lines were returned by the latest scan.</p>
+        )}
       </div>
     );
   }
 
   return (
-    <div className={embedded ? "trustlineEmbedded" : "card trustlineCard"}>
-      <div className="sectionHeaderRow trustlineSectionHeader">
-        <div>
-          <h2 className={embedded ? "trustlineEmbeddedTitle" : "cardTitle"}>
-            {embedded ? "Per-token cleanup planner" : "Trustlines and offers"}
-          </h2>
-          <p className="hint">
-            Review one token line at a time. Swap, return, or remove the balance, then close the trustline to release the
-            reserve attached to that line.
-          </p>
+    <div className={embedded ? `trustlineEmbedded${inlineList ? " trustlineEmbedded--inline" : ""}` : "card trustlineCard"}>
+      {!inlineList ? (
+        <div className="sectionHeaderRow trustlineSectionHeader">
+          <div>
+            <h2 className={embedded ? "trustlineEmbeddedTitle" : "cardTitle"}>
+              {embedded ? "Per-token cleanup planner" : "Trustlines and offers"}
+            </h2>
+            <p className="hint">
+              Review one token line at a time. Swap, return, or remove the balance, then close the trustline to release the
+              reserve attached to that line.
+            </p>
+          </div>
         </div>
-      </div>
+      ) : null}
       {offersBlocked ? (
         <div className="trustlineNotice trustlineNotice--warn">
           Open offers may need to be cancelled first. Offers can block trustline removal for the same asset.
@@ -467,63 +475,64 @@ export function TrustlineTeardownCard(props: {
                   value: "sdex",
                   label:
                     book.status === "loading"
-                      ? "SDEX swap · checking liquidity"
+                      ? "Swap token · checking liquidity"
                       : book.status === "error"
-                        ? "SDEX swap · unavailable"
+                        ? "Swap token · unavailable"
                         : book.status === "ok" && book.thin
-                          ? "SDEX swap · book too thin"
-                          : "SDEX swap to XLM",
+                          ? "Swap token · book too thin"
+                          : "Swap token to XLM",
                   disabled: !(book.status === "ok" && !book.thin && book.bestPrice),
                 },
                 {
                   value: "soroswap",
-                  label: soroswapConfigured ? "Soroswap route" : "Soroswap route · unavailable",
+                  label: soroswapConfigured ? "Swap via Soroswap" : "Swap via Soroswap · unavailable",
                   disabled: soroswapConfigured !== true,
                 },
-                { value: "payout", label: "Send full token balance" },
+                { value: "payout", label: "Send balance" },
               ]
-            : [{ value: "remove", label: "Remove empty trustline" }];
+            : [{ value: "remove", label: "Remove empty line" }];
 
           const primaryAction =
             mode === "sdex"
-              ? { label: "Swap on SDEX", disabled: !canSell, run: () => void onSell(r) }
+              ? { label: "Swap token", disabled: !canSell, run: () => void onSell(r) }
               : mode === "soroswap"
                 ? {
-                    label: soroswapConfigured ? "Swap via Soroswap" : "Soroswap unavailable",
+                    label: soroswapConfigured ? "Swap token" : "Soroswap unavailable",
                     disabled: !canSoroswapSell,
                     run: () => void onSoroswapSell(r),
                   }
                 : mode === "payout"
                   ? {
-                      label: "Send token + remove trustline",
+                      label: "Send balance + remove line",
                       disabled: !ready || walletBusy,
                       run: () => void onPayIssuerAndRemove(r),
                     }
                   : {
-                      label: "Remove trustline",
+                      label: "Remove empty line",
                       disabled: !ready || walletBusy,
                       run: () => void onRemoveZeroOnly(r),
                     };
-
           return (
             <li key={k} className="trustlineTokenShell">
               <details className="trustlineToken">
-                <summary className="trustlineTokenSummary">
+                <summary className="trustlineTokenSummary resultActionRow resultActionRow--value">
                   <div className="trustlineTokenIdentity">
                     <strong>{r.assetCode}</strong>
                     <span>{issuerLabel(r.assetIssuer)}</span>
-                  </div>
-                  <div className="trustlineTokenMeta">
-                    <span className={`statusBadge ${hasBalance ? "statusBadge--warn" : "statusBadge--ok"}`}>
-                      {hasBalance ? "Balance to unwind" : "Ready to remove"}
-                    </span>
-                    <span className="trustlineReserveHint">Reserve unlocks after line removal</span>
                   </div>
                   <div className="trustlineTokenBalance">
                     <span>Balance</span>
                     <strong>{r.balance}</strong>
                   </div>
-                  <span className="stateDetailGroupMeta">
+                  <div className="trustlineTokenMeta">
+                    <span className={`statusBadge ${hasBalance ? "statusBadge--warn" : "statusBadge--ok"}`}>
+                      {hasBalance ? "Balance to unwind" : "Ready to remove"}
+                    </span>
+                    <span className="trustlineReserveHint">
+                      {hasBalance ? "Remove trustline to release balance" : "Remove trustline to release reserve"}
+                    </span>
+                  </div>
+                  <span className="stateDetailGroupMeta trustlineTokenActionMeta">
                     <span>{hasBalance ? actionOptions.filter((option) => !option.disabled).length : 1} action{hasBalance && actionOptions.filter((option) => !option.disabled).length !== 1 ? "s" : ""}</span>
                     <span className="stateDetailGroupChevron" aria-hidden>
                       ⌄
@@ -532,6 +541,7 @@ export function TrustlineTeardownCard(props: {
                 </summary>
 
                 <div className="trustlineTokenBody">
+                  <h3 className="trustlineStepTitle">What we found</h3>
                   <div className="trustlineFacts">
                     <div className="trustlineFact">
                       <span>Token line</span>
@@ -560,7 +570,7 @@ export function TrustlineTeardownCard(props: {
                   ) : null}
 
                   <div className="trustlinePlanner">
-                    <label className="label trustlinePlannerLabel">Choose cleanup action</label>
+                    <label className="label trustlinePlannerLabel">Choose cleanup route</label>
                     <div className="trustlinePlannerControls">
                       <label className="networkSelectWrap trustlineActionSelectWrap">
                         <select
@@ -622,6 +632,7 @@ export function TrustlineTeardownCard(props: {
 
                     {mode === "payout" && hasBalance ? (
                       <div className="payoutBlock">
+                        <h3 className="trustlineStepTitle">Destination and confirmation</h3>
                         <label className="label">Payout target (full token balance)</label>
                         <input
                           className="input"
@@ -642,6 +653,7 @@ export function TrustlineTeardownCard(props: {
                     ) : null}
 
                     <div className="trustlinePlannerFooter">
+                      <span className="trustlineStepTitle trustlineStepTitle--inline">Final action</span>
                       <button
                         type="button"
                         className={primaryAction.disabled ? "btn ghost" : "btn secondary"}
