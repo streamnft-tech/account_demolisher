@@ -139,6 +139,14 @@ const footerLinks = {
   ],
 };
 
+const scanChecklistLabels = [
+  "Estimated reserve release",
+  "Trustline cleanup",
+  "Permission review",
+  "Manual protocol review",
+  "Close readiness",
+];
+
 function statusGlyph(status: ChecklistStatus): string {
   switch (status) {
     case "pass":
@@ -175,20 +183,6 @@ function loadWatchlist(): WatchlistEntry[] {
 function formatAccount(accountId: string): string {
   if (accountId.length < 12) return accountId;
   return `${accountId.slice(0, 6)}…${accountId.slice(-6)}`;
-}
-
-function formatLastScanned(ts?: number): string {
-  if (!ts) return "Not scanned";
-  try {
-    return new Intl.DateTimeFormat(undefined, {
-      month: "short",
-      day: "numeric",
-      hour: "numeric",
-      minute: "2-digit",
-    }).format(ts);
-  } catch {
-    return "Scanned";
-  }
 }
 
 function useRouteMode(): RouteMode {
@@ -301,7 +295,7 @@ function LandingPage() {
           <img className="brandMark" src="/orbitway-logo.png" alt="" />
           <div>
             <div className="brandName">Orbitway</div>
-            <div className="brandTag">Account health for Stellar</div>
+            <div className="brandTag">Account health and cleanup</div>
           </div>
         </div>
         <div className="nav nav--desktop nav--actions">
@@ -634,112 +628,87 @@ function stateRowCopy(row: HealthChecklistItem | undefined): { value: string; de
 }
 
 function scanRowCopy(label: string, row: HealthChecklistItem | undefined, health: HealthReport) {
-  if (label === "Native XLM balance") {
-    return {
-      value: "Available",
-      detail:
-        typeof health.nativeBalanceXlm === "number"
-          ? `${formatXlmCompact(health.nativeBalanceXlm)} available on this account.`
-          : "Native balance was not returned by the latest scan.",
-      tone: "pass",
-    };
-  }
-  if (label === "Recoverable reserve") {
-    return {
-      value: "Available",
-      detail: "This estimates the XLM reserve tied to active trustlines that can be released as those lines are resolved.",
-      tone: "pass",
-    };
-  }
-  if (label === "Non-native balances") {
+  if (label === "Estimated reserve release") {
     return row?.status === "pass"
-      ? { value: "Clean", detail: "No non-native balances detected in the latest scan.", tone: "pass" }
-      : { value: "Needs cleanup", detail: "Non-native balances or trustline assets must be resolved before closing.", tone: "fail" };
+      ? { value: "Ready", detail: "Reserve tied to removable trustlines is no longer blocked.", tone: "pass" }
+      : {
+          value: "Locked value",
+          detail: "Token lines still hold reserve. Review the trustline planner to release it safely.",
+          tone: "fail",
+        };
   }
-  if (label === "Estimated close payout") {
-    return {
-      value: "Estimated",
-      detail: "Final payout is estimated after network fees and destination confirmation.",
-      tone: "unknown",
-    };
+  if (label === "Claimable balances") {
+    return row?.status === "pass"
+      ? { value: "None", detail: "No claimable balances were returned by the latest scan.", tone: "pass" }
+      : { value: "Available", detail: "These balances are claimable to the account and are separate from reserve release.", tone: "fail" };
+  }
+  if (label === "Token-line cleanup opportunities") {
+    return row?.status === "pass"
+      ? { value: "Clear", detail: "No token lines need cleanup before close.", tone: "pass" }
+      : {
+          value: "Review token lines",
+          detail: "Each token line can be handled individually so you can unlock value without guesswork.",
+          tone: "fail",
+        };
   }
   if (label === "Trustlines") {
     return row?.status === "pass"
-      ? { value: "Clean", detail: "No removable trustlines found.", tone: "pass" }
-      : { value: "Needs cleanup", detail: "Active trustlines must be removed before the account can close cleanly.", tone: "fail" };
+      ? { value: "Clear", detail: "No removable trustlines were detected.", tone: "pass" }
+      : { value: "Needs cleanup", detail: "Trustlines must be resolved before the account can close cleanly.", tone: "fail" };
   }
-  if (label === "Open offers") {
+  if (label === "Sponsorships") {
     return row?.status === "pass"
-      ? { value: "Clean", detail: "No open offers found.", tone: "pass" }
-      : { value: "Needs cleanup", detail: "Open DEX offers should be cancelled before closing the account.", tone: "fail" };
+      ? { value: "None", detail: "No sponsorship relationships are blocking the account.", tone: "pass" }
+      : { value: "Blocked", detail: "Sponsored reserves must be cleared before final close.", tone: "fail" };
   }
-  if (label === "Extra signers") {
+  if (label === "Open activity") {
     return row?.status === "pass"
-      ? { value: "Clean", detail: "No extra signers or multisig relationships were detected.", tone: "pass" }
-      : { value: "Needs review", detail: "This account appears to use extra signers or participate in a multisig-style approval setup.", tone: "fail" };
+      ? { value: "Clear", detail: "No open offers or liquidity positions remain.", tone: "pass" }
+      : { value: "Needs cleanup", detail: "Open offers or positions may still block cleanup or close.", tone: "fail" };
   }
-  if (label === "Thresholds") {
+  if (label === "LP positions") {
     return row?.status === "pass"
-      ? { value: "Default", detail: "Default account thresholds detected.", tone: "pass" }
-      : { value: "Needs review", detail: "Custom thresholds may require review before cleanup or closure.", tone: "fail" };
+      ? { value: "Clear", detail: "No liquidity pool positions were returned.", tone: "pass" }
+      : { value: "Needs cleanup", detail: "Liquidity positions can block a clean exit.", tone: "fail" };
   }
-  if (label === "Token allowances") {
+  if (label === "Allowances") {
     if (!row || row.status === "skipped" || row.status === "unknown") {
       return {
-        value: "Unable to verify",
-        detail: "Known spender contracts are not configured, so token allowances could not be fully checked.",
+        value: "Manual review",
+        detail: "Spender configuration was not fully available, so approvals need a manual look.",
         tone: "unknown",
       };
     }
     return row.status === "pass"
-      ? { value: "Clean", detail: "No active token allowances returned by the configured scan.", tone: "pass" }
-      : { value: "Needs cleanup", detail: "Active token approvals may allow external spenders to move assets.", tone: "fail" };
+      ? { value: "Clear", detail: "No active token approvals were returned by the scan.", tone: "pass" }
+      : { value: "Needs review", detail: "Active approvals may still let external spenders move assets.", tone: "fail" };
   }
-  if (label === "LP positions") {
+  if (label === "Extra signers / shared control") {
     return row?.status === "pass"
-      ? { value: "Clean", detail: "No LP positions detected.", tone: "pass" }
-      : { value: "Needs cleanup", detail: "Liquidity pool positions should be closed before account closure.", tone: "fail" };
+      ? { value: "Single control", detail: "No additional signers were detected.", tone: "pass" }
+      : { value: "Shared control", detail: "This account may use shared control or multisig-style approvals.", tone: "fail" };
   }
-  if (label === "DeFi positions") {
+  if (label === "Thresholds / approval rules") {
     return row?.status === "pass"
-      ? { value: "Clean", detail: "No required DeFi blockers returned by the latest scan.", tone: "pass" }
-      : { value: "Manual review", detail: "Some protocol checks require manual review before closing.", tone: "unknown" };
+      ? { value: "Default", detail: "Approval rules are at the expected defaults.", tone: "pass" }
+      : { value: "Review rules", detail: "Custom approval rules should be checked before cleanup or close.", tone: "fail" };
   }
-  if (label === "Protocol surfaces") {
-    return {
-      value: "Manual review",
-      detail: "Review protocol surfaces such as Blend, Aquarius, and Soroswap before closing.",
-      tone: "unknown",
-    };
-  }
-  if (label === "Claimable balances") {
+  if (label === "Manual protocol review") {
     return row?.status === "pass"
-      ? { value: "Clean", detail: "No pending claimable balances found.", tone: "pass" }
-      : { value: "Available", detail: "These are inbound balances claimable to this account, separate from reserve locked inside trustlines.", tone: "fail" };
-  }
-  if (label === "Sponsorships") {
-    return row?.status === "pass"
-      ? { value: "Clean", detail: "No active sponsorship blockers found.", tone: "pass" }
-      : { value: "Blocked", detail: "Active sponsorship relationships must be resolved before this account can close.", tone: "fail" };
+      ? { value: "None", detail: "No extra protocol review was returned by the latest scan.", tone: "pass" }
+      : { value: "Review", detail: "Protocol details should be expanded before you close this account.", tone: "unknown" };
   }
   if (label === "Destination") {
-    return { value: "Not confirmed", detail: "Add and verify a destination before closing the account.", tone: "unknown" };
-  }
-  if (label === "Manual reviews") {
     return {
-      value: "Manual review",
-      detail: "Aquarius and Soroswap should be reviewed before closing.",
+      value: "Not set",
+      detail: "Choose and verify a destination before triggering the final close flow.",
       tone: "unknown",
     };
   }
-  if (label === "Close status") {
+  if (label === "Close readiness") {
     return health.canDemolish
-      ? {
-          value: "Technically ready",
-          detail: "No required blockers were detected, but manual protocol review is suggested before closing.",
-          tone: "pass",
-        }
-      : stateRowCopy(row);
+      ? { value: "Ready", detail: "No required blockers remain, though manual review is still recommended.", tone: "pass" }
+      : { value: "Blocked", detail: "Open cleanup items still need attention before close.", tone: "fail" };
   }
   return stateRowCopy(row);
 }
@@ -764,24 +733,24 @@ function rowActionFor(
 ): { label: string; disabled?: boolean; onClick?: () => void } {
   if (!row) return { label: "Unsupported", disabled: true };
   if (row.status === "pass") return { label: "No action needed", disabled: true };
-  if (row.id === "native_merge_payout") return { label: "Review close step", onClick: opts.onCloseStep };
+  if (row.id === "native_merge_payout") return { label: "Review close flow", onClick: opts.onCloseStep };
   if (row.id === "classic_min_reserve") return { label: "Set destination", onClick: opts.onCloseStep };
   if (row.id === "defi_positions") return { label: "Review manually" };
   if (row.id === "soroban_allowances") {
-    if (row.status === "skipped" || row.status === "unknown") return { label: "Configure spenders" };
+    if (row.status === "skipped" || row.status === "unknown") return { label: "Review approvals" };
     return opts.walletConnected ? { label: "Revoke allowance" } : { label: "Connect Wallet", onClick: opts.onConnectWallet };
   }
   const blockerActions: Partial<Record<string, { code: BlockerCode; label: string }>> = {
-    classic_open_offers: { code: "OPEN_OFFERS", label: "Cancel offers" },
+    classic_open_offers: { code: "OPEN_OFFERS", label: "Cancel open offers" },
     classic_claimable_balances: { code: "CLAIMABLE_BALANCES_PENDING", label: "Claim balance" },
     classic_sponsorship: { code: "SPONSORING_OTHER_ACCOUNTS", label: "Resolve sponsorship" },
     classic_data_entries: { code: "DATA_ENTRIES", label: "Remove data entries" },
     classic_extra_signers: { code: "MULTISIG_OR_EXTRA_SIGNERS", label: "Review signers" },
-    classic_thresholds: { code: "NON_DEFAULT_THRESHOLDS", label: "Review thresholds" },
+    classic_thresholds: { code: "NON_DEFAULT_THRESHOLDS", label: "Review approval rules" },
     classic_amm_lp_shares: { code: "OPEN_LIQUIDITY_POOL", label: "Close position" },
   };
   if (row.id === "classic_trustlines") {
-    return opts.walletConnected ? { label: "Close trustline" } : { label: "Connect Wallet", onClick: opts.onConnectWallet };
+    return opts.walletConnected ? { label: "Open trustline planner" } : { label: "Connect Wallet", onClick: opts.onConnectWallet };
   }
   const action = blockerActions[row.id];
   if (action) {
@@ -820,88 +789,69 @@ function AccountStateDetails({
   const byId = new Map(checklist.map((row) => [row.id, row]));
   const groups = [
     {
-      title: "Reserves and balances",
+      id: "unlock-value",
+      title: "Unlock value",
+      description: "Reserve release, claimable balances, and token-line cleanup live here.",
       rows: [
-        ["Native XLM balance", byId.get("native_merge_payout")],
-        ["Recoverable reserve", byId.get("classic_min_reserve")],
-        ["Non-native balances", byId.get("classic_trustlines")],
-        ["Estimated close payout", byId.get("native_merge_payout")],
+        ["Estimated reserve release", byId.get("classic_trustlines")],
+        ["Claimable balances", byId.get("classic_claimable_balances")],
+        ["Token-line cleanup opportunities", byId.get("classic_trustlines")],
       ] as Array<[string, HealthChecklistItem | undefined]>,
     },
     {
-      title: "Trustlines",
-      rows: [["Trustlines", byId.get("classic_trustlines")]] as Array<[string, HealthChecklistItem | undefined]>,
-    },
-    {
-      title: "Permissions and signers",
+      id: "remove-blockers",
+      title: "Remove blockers",
+      description: "Fix the account state that most often prevents cleanup or close.",
       rows: [
-        ["Extra signers", byId.get("classic_extra_signers")],
-        ["Thresholds", byId.get("classic_thresholds")],
-        ["Token allowances", byId.get("soroban_allowances")],
-      ] as Array<[string, HealthChecklistItem | undefined]>,
-    },
-    {
-      title: "Open positions",
-      rows: [
-        ["Open offers", byId.get("classic_open_offers")],
+        ["Trustlines", byId.get("classic_trustlines")],
+        ["Sponsorships", byId.get("classic_sponsorship")],
+        ["Open activity", byId.get("classic_open_offers") ?? byId.get("classic_amm_lp_shares")],
         ["LP positions", byId.get("classic_amm_lp_shares")],
-        ["DeFi positions", byId.get("defi_positions")],
-        ["Protocol surfaces", byId.get("defi_positions")],
       ] as Array<[string, HealthChecklistItem | undefined]>,
     },
     {
-      title: "Claimable balances",
-      rows: [["Claimable balances", byId.get("classic_claimable_balances")]] as Array<[string, HealthChecklistItem | undefined]>,
+      id: "review-permissions",
+      title: "Review permissions",
+      description: "Check approvals, control rules, and shared access before write actions.",
+      rows: [
+        ["Allowances", byId.get("soroban_allowances")],
+        ["Extra signers / shared control", byId.get("classic_extra_signers")],
+        ["Thresholds / approval rules", byId.get("classic_thresholds")],
+      ] as Array<[string, HealthChecklistItem | undefined]>,
     },
     {
-      title: "Sponsorships",
-      rows: [["Sponsorships", byId.get("classic_sponsorship")]] as Array<[string, HealthChecklistItem | undefined]>,
-    },
-    {
-      title: "Close readiness",
+      id: "close-safely",
+      title: "Close safely",
+      description: "Confirm destination, manual review, and final readiness before the irreversible step.",
       rows: [
         ["Destination", undefined],
-        ["Manual reviews", byId.get("defi_positions")],
-        ["Close status", byId.get("classic_min_reserve")],
+        ["Manual protocol review", byId.get("defi_positions")],
+        ["Close readiness", byId.get("classic_min_reserve")],
       ] as Array<[string, HealthChecklistItem | undefined]>,
     },
   ];
   const protocols = health.openPositions?.defiProtocols ?? [];
 
   return (
-    <section className={embedded ? "snapshotDetails" : "card consolePrimaryCard"}>
-      <div className="sectionHeaderRow">
+    <section className={embedded ? "snapshotDetails" : "reportSurface"}>
+      <div className="sectionHeaderRow sectionHeaderRow--compact">
         <div>
-          <h2 className="cardTitle">Actionable scan report</h2>
-          <p className="hint">Open a category to review cleanup rows, technical details, and the next available action.</p>
+          <h2 className="cardTitle">Actionable report</h2>
+          <p className="hint">Each section keeps the default view short and moves technical detail behind expanders.</p>
         </div>
       </div>
 
       <div className="stateDetailGrid">
         {groups.map((group) => (
-          <details key={group.title} className="stateDetailGroup">
+          <details key={group.title} className={`stateDetailGroup stateDetailGroup--${group.id}`}>
             <summary className="stateDetailGroupSummary">
               <div className="stateDetailGroupHeading">
                 <h3>{group.title}</h3>
-                <p>
-                  {group.title === "Trustlines"
-                    ? "Per-token trustline cleanup and reserve-release actions."
-                    : group.title === "Sponsorships"
-                      ? "Sponsored entries and reserve relationships that can block close."
-                      : group.title === "Permissions and signers"
-                        ? "Multisig, signer relationships, allowances, and thresholds that affect account control."
-                        : group.title === "Open positions"
-                          ? "DEX offers, liquidity positions, protocol surfaces, and manual review signals."
-                          : group.title === "Claimable balances"
-                            ? "Inbound balances that can be claimed before closure."
-                            : group.title === "Close readiness"
-                              ? "Destination setup and final close-state checks."
-                              : "Balances and reserve-related details for final payout."}
-                </p>
+                <p>{group.description}</p>
               </div>
               <span className="stateDetailGroupMeta">
                 <span>
-                  {group.rows.length} detail{group.rows.length === 1 ? "" : "s"}
+                  {group.rows.length} item{group.rows.length === 1 ? "" : "s"}
                 </span>
                 <span className="stateDetailGroupChevron" aria-hidden>
                   ⌄
@@ -914,27 +864,25 @@ function AccountStateDetails({
                 const action =
                   label === "Destination"
                     ? { label: "Set destination", onClick: onCloseStep }
-                    : label === "Recoverable reserve"
+                    : label === "Estimated reserve release"
                       ? walletConnected
-                        ? { label: "Set destination", onClick: onCloseStep }
+                        ? { label: "Open trustline planner", onClick: onCloseStep }
                         : { label: "Connect Wallet", onClick: onConnectWallet }
-                      : label === "Estimated close payout"
-                        ? { label: "Review close step", onClick: onCloseStep }
-                        : label === "Native XLM balance"
-                          ? { label: "No action needed", disabled: true }
-                          : label === "Close status"
-                            ? walletConnected
-                              ? { label: "Continue to close", onClick: onCloseStep }
-                              : { label: "Connect Wallet", onClick: onConnectWallet }
-                            : rowActionFor(row, {
-                                walletConnected,
-                                walletBusy,
-                                onConnectWallet,
-                                onCloseStep,
-                                onResolveClassicBlocker,
-                              });
+                      : label === "Close readiness"
+                        ? walletConnected
+                          ? { label: "Open close flow", onClick: onCloseStep }
+                          : { label: "Connect Wallet", onClick: onConnectWallet }
+                        : label === "Token-line cleanup opportunities"
+                          ? { label: "Open trustline planner", onClick: onCloseStep }
+                          : rowActionFor(row, {
+                            walletConnected,
+                            walletBusy,
+                            onConnectWallet,
+                            onCloseStep,
+                            onResolveClassicBlocker,
+                          });
                 return (
-                  <details key={label} className="scanReportRow">
+                  <details key={label} className={`scanReportRow scanReportRow--${group.id}`}>
                     <summary>
                       <div className="scanReportMain">
                         <span>{label}</span>
@@ -959,12 +907,12 @@ function AccountStateDetails({
                       {row ? (
                         <dl>
                           <div>
-                            <dt>Status</dt>
+                            <dt>State</dt>
                             <dd>{outcomeLabel(row)}</dd>
                           </div>
                           <div>
-                            <dt>Blocks close</dt>
-                            <dd>{row.blocksDemolish ? "Yes" : "No"}</dd>
+                            <dt>Risk</dt>
+                            <dd>{row.blocksDemolish ? "Blocks cleanup" : "Review only"}</dd>
                           </div>
                           <div>
                             <dt>Check ID</dt>
@@ -972,16 +920,11 @@ function AccountStateDetails({
                           </div>
                         </dl>
                       ) : null}
-                      {label === "Native XLM balance" && typeof health.nativeBalanceXlm === "number" ? (
-                        <p className="monoDetail">Full precision: {health.nativeBalanceXlm.toFixed(7)} XLM</p>
-                      ) : null}
                     </div>
                   </details>
                 );
               })}
-              {group.title === "Trustlines" && trustlinePanel ? (
-                <div className="scanReportEmbeddedPanel">{trustlinePanel}</div>
-              ) : null}
+              {group.id === "unlock-value" && trustlinePanel ? <div className="scanReportEmbeddedPanel">{trustlinePanel}</div> : null}
             </div>
           </details>
         ))}
@@ -989,7 +932,7 @@ function AccountStateDetails({
 
       {protocols.length > 0 ? (
         <div className="protocolList">
-          <h3>Protocol surfaces</h3>
+          <h3>Manual protocol review</h3>
           {protocols.map((protocol) => (
             <article key={protocol.id} className="protocolRow">
               <div>
@@ -997,7 +940,7 @@ function AccountStateDetails({
                 <p>{protocol.detail}</p>
               </div>
               <span className={`stateValue stateValue--${protocol.status}`}>
-                {protocol.status === "pass" ? "Passed" : protocol.status === "fail" ? "Needs review" : "Manual review"}
+                {protocol.status === "pass" ? "Clear" : protocol.status === "fail" ? "Review" : "Manual"}
               </span>
             </article>
           ))}
@@ -1022,7 +965,6 @@ function AppShell() {
   const [lastScannedAt, setLastScannedAt] = useState<number | null>(null);
   const [watchlist, setWatchlist] = useState<WatchlistEntry[]>(() => loadWatchlist());
   const [watchlistDraft, setWatchlistDraft] = useState("");
-  const [watchlistNetwork, setWatchlistNetwork] = useState<UiNetwork>("testnet");
   const [closeConfirm, setCloseConfirm] = useState("");
   const [didAutoloadQueryAccount, setDidAutoloadQueryAccount] = useState(false);
   const [mergeBusy, setMergeBusy] = useState(false);
@@ -1268,8 +1210,17 @@ function AppShell() {
     health?.openPositions?.defiProtocols.filter((protocol) => protocol.status === "unknown" || protocol.status === "fail").length ?? 0;
   const openPositionCount =
     (health?.openPositions?.liquidityPoolShares.length ?? 0) + (health?.openPositions?.sdexOffers.length ?? 0);
-  const accountStatusLabel = !health ? "Requires scan" : health.canDemolish ? "Technically ready" : blocking.length > 0 ? "Needs cleanup" : "Needs review";
-  const trustlinesLabel = checklistById.get("classic_trustlines")?.status === "pass" ? "0 active" : checklistById.get("classic_trustlines") ? "Active" : "Unable to verify";
+  const claimableBalanceRow = checklistById.get("classic_claimable_balances");
+  const claimableBalanceLabel = !claimableBalanceRow
+    ? "Unable to verify"
+    : claimableBalanceRow.status === "pass"
+      ? "None found"
+      : "Available";
+  const permissionReviewCount = [
+    checklistById.get("classic_extra_signers"),
+    checklistById.get("classic_thresholds"),
+    checklistById.get("soroban_allowances"),
+  ].filter((row) => row && row.status !== "pass").length;
   useEffect(() => {
     if (!health || !sourceTrim) return;
     setWatchlist((prev) =>
@@ -1336,27 +1287,42 @@ function AppShell() {
     void scanAccount(sourceTrim, network);
   }, [didAutoloadQueryAccount, network, scanAccount, sourceTrim]);
 
-  const scanStatus = health ? "Latest scan" : "Ready";
-  const healthStatus = sourceTrim ? (isSaved ? "Saved" : "Save account") : "Saved accounts";
-  const closeStatus = !sourceTrim || !health ? "Locked" : readyByHealth ? "Ready" : "Locked";
+  const scanStatus = health ? "Latest scan" : "Ready to scan";
+  const healthStatus = sourceTrim ? (isSaved ? "Saved" : "Not saved") : "Saved accounts";
+  const closeStatus = !sourceTrim || !health ? "Locked" : readyByHealth ? "Ready to close" : "Needs cleanup";
+  const accountStateLabel = !health ? "Awaiting scan" : health.canDemolish ? "Ready" : blocking.length > 0 ? "Needs cleanup" : "Needs review";
+  const reserveReleaseLabel =
+    typeof trustlineReserveXlm === "number" ? formatXlmCompact(trustlineReserveXlm) : "Not estimated yet";
+  const trustlineStateLabel =
+    trustlineSummary
+      ? `${trustlineSummary.total} token line${trustlineSummary.total === 1 ? "" : "s"}`
+      : checklistById.get("classic_trustlines")?.status === "pass"
+        ? "None detected"
+        : "Needs cleanup";
+  const manualReviewStateLabel =
+    protocolReviewCount === 0
+      ? "No manual review flags"
+      : `${protocolReviewCount} item${protocolReviewCount === 1 ? "" : "s"} to review`;
+  const permissionStateLabel = permissionReviewCount === 0 ? "Clear" : `${permissionReviewCount} review${permissionReviewCount === 1 ? "" : "s"}`;
+  const destinationStateLabel = destOk ? "Set" : "Missing";
 
   return (
     <div className="page page--app">
-      <main className="workspace">
-        <section className="consoleShell">
-          <aside className="consoleSidebar">
-            <div className="consoleSidebarTop">
-              <div className="brand">
-                <img className="brandMark" src="/orbitway-logo.png" alt="" />
-                <div>
-                  <div className="brandName">Orbitway</div>
-                  <div className="brandTag">Account cleanup console</div>
-                </div>
+      <main className="workspace workspace--shell">
+        <aside className="consoleSidebar">
+          <div className="consoleSidebarTop">
+            <div className="brand">
+              <img className="brandMark" src="/orbitway-logo.png" alt="" />
+              <div>
+                <div className="brandName">Orbitway</div>
+                <div className="brandTag">Account health and cleanup</div>
               </div>
             </div>
+            <p className="sidebarIntro">Account health, cleanup, and safe exit for Stellar.</p>
+          </div>
 
-            <nav className="sidebarNav" aria-label="App navigation">
-              {[
+          <nav className="sidebarNav" aria-label="App navigation">
+            {[
                 ["scan", "Scan", scanStatus],
                 ["health", "Health", healthStatus],
                 ["close", "Close Account", closeStatus],
@@ -1364,604 +1330,589 @@ function AppShell() {
                 <button
                   key={id}
                   type="button"
-                  className={`sidebarNavButton${activeSection === id ? " sidebarNavButton--active" : ""}`}
+                  className={`sidebarNavButton sidebarNavButton--${id}${activeSection === id ? " sidebarNavButton--active" : ""}`}
                   onClick={() => setActiveSection(id as AppSection)}
                 >
-                  <span className="sidebarNavLabel">{label}</span>
-                  <span className="sidebarNavMeta">{detail}</span>
-                </button>
-              ))}
-            </nav>
-          </aside>
+                <span className="sidebarNavLabel">{label}</span>
+                <span className="sidebarNavMeta">{detail}</span>
+              </button>
+            ))}
+          </nav>
 
-          <section className="consoleContent">
-            <div className="consoleTopbar">
-              <div className="consoleTopbarActions">
-                <div className="topbarNetworkControl">
-                  <span>Network</span>
-                  <label className="networkSelectWrap" aria-label="Stellar network">
-                    <select
-                      className="networkSelect"
-                      value={network}
-                      onChange={(event) => {
-                        setNetwork(event.target.value as UiNetwork);
-                        setHealth(null);
-                      }}
-                    >
-                      <option value="testnet">Testnet</option>
-                      <option value="mainnet">Mainnet</option>
-                    </select>
-                  </label>
-                </div>
-                {walletAddress ? (
-                  <>
-                    <button type="button" className="btn secondary" disabled={walletBusy} onClick={openWalletProfile}>
-                      Switch Wallet
-                    </button>
-                    <button type="button" className="btn ghost" disabled={walletBusy} onClick={disconnectWallet}>
-                      Disconnect
-                    </button>
-                  </>
-                ) : (
-                  <>
-                    <button type="button" className="btn secondary" disabled={walletBusy} onClick={connectWallet}>
-                      {walletBusy ? "Opening…" : "Connect Wallet"}
-                    </button>
-                  </>
-                )}
-              </div>
+          <div className="sidebarBottom">
+            <div className="sidebarWalletCard">
+              <strong>{walletAddress ? formatAccount(walletAddress) : "Wallet not connected"}</strong>
+              <span>{walletAddress ? "Connected for write actions" : "Connect only when you need to sign"}</span>
             </div>
+          </div>
+        </aside>
 
-            {activeSection === "scan" ? (
-              <>
-                <div className="pageIntro pageHeader pageHeader--simple">
-                  <div className="pageHeaderCopy">
-                    <h1>Check account health.</h1>
+        <section className="consoleContent">
+          <header className="consoleTopbar">
+            <div className="topbarNetworkControl">
+              <span>Network</span>
+              <label className="networkSelectWrap" aria-label="Stellar network">
+                <select
+                  className="networkSelect"
+                  value={network}
+                  onChange={(event) => {
+                    setNetwork(event.target.value as UiNetwork);
+                    setHealth(null);
+                  }}
+                >
+                  <option value="testnet">Testnet</option>
+                  <option value="mainnet">Mainnet</option>
+                </select>
+              </label>
+            </div>
+            <div className="consoleTopbarActions">
+              {walletAddress ? (
+                <>
+                  <button type="button" className="btn secondary" disabled={walletBusy} onClick={openWalletProfile}>
+                    Switch Wallet
+                  </button>
+                  <button type="button" className="btn ghost" disabled={walletBusy} onClick={disconnectWallet}>
+                    Disconnect
+                  </button>
+                </>
+              ) : (
+                <button type="button" className="btn secondary" disabled={walletBusy} onClick={connectWallet}>
+                  {walletBusy ? "Opening…" : "Connect Wallet"}
+                </button>
+              )}
+            </div>
+          </header>
+
+          {activeSection === "scan" ? (
+            <section className="appSection appSection--scan">
+              <div className="scanHero">
+                <SectionKicker>Quiet Orbital Utility</SectionKicker>
+                <h1>Check account health.</h1>
+                <p>Scan a Stellar address to see what needs attention before you clean up or close the account.</p>
+              </div>
+
+              <section className="scanWorkspace">
+                <div className="card consolePrimaryCard scanFormCard scanFormCard--hero">
+                  <h2 className="cardTitle">Scan a Stellar address</h2>
+                  <div className="scanInputRow">
+                    <div className="overviewControlBlock scanInputControl">
+                      <input
+                        id="source"
+                        className="input"
+                        placeholder="G..."
+                        value={source}
+                        onChange={(e) => {
+                          setSource(e.target.value);
+                          setHealth(null);
+                          setActionSuccess(null);
+                        }}
+                        spellCheck={false}
+                        autoCapitalize="none"
+                      />
+                    </div>
+                    <button type="button" className="btn primary scanSubmit" disabled={loading} onClick={runHealthCheck}>
+                      {loading ? "Scanning…" : "Scan"}
+                    </button>
                   </div>
+                  <p className="hint scanHelper">No signing is required to scan. Use your wallet only when you approve a cleanup or close action.</p>
+                  {walletError ? <p className="error">{walletError}</p> : null}
+                  {error ? <p className="error">{error}</p> : null}
+                  {walletMismatch ? (
+                    <p className="error">
+                      Connected wallet <code className="inlineCode">{walletAddress?.slice(0, 8)}…</code> does not match the
+                      selected account.
+                    </p>
+                  ) : null}
                 </div>
+              </section>
 
-                <section className="scanWorkspace">
-                  <div className="card consolePrimaryCard scanFormCard">
-                    <div>
-                      <h2 className="cardTitle">Scan a Stellar address</h2>
-                    </div>
-
-                    <div className="overviewControls">
-                      <div className="overviewControlBlock">
-                        <input
-                          id="source"
-                          className="input"
-                          placeholder="G..."
-                          value={source}
-                          onChange={(e) => {
-                            setSource(e.target.value);
-                            setHealth(null);
-                            setActionSuccess(null);
-                          }}
-                          spellCheck={false}
-                          autoCapitalize="none"
-                        />
-                      </div>
-                    </div>
-
-                    <div className="sectionActions">
-                      <button type="button" className="btn primary scanSubmit" disabled={loading} onClick={runHealthCheck}>
-                        {loading ? "Scanning…" : "Scan a Stellar address"}
-                      </button>
-                    </div>
-                    {walletError ? <p className="error">{walletError}</p> : null}
-                    {error ? <p className="error">{error}</p> : null}
-                    {walletMismatch ? (
-                      <p className="error">
-                        Connected wallet <code className="inlineCode">{walletAddress?.slice(0, 8)}…</code> does not match
-                        the selected account. Cleanup actions require the account owner wallet.
-                      </p>
-                    ) : null}
-                  </div>
+              {!health ? (
+                <section className="supportBand">
+                  <article className="card consolePrimaryCard scanInfoCard">
+                    <h2 className="cardTitle">What the scan checks</h2>
+                    <ul className="scanCheckList">
+                      {scanChecklistLabels.map((item) => (
+                        <li key={item}>{item}</li>
+                      ))}
+                    </ul>
+                  </article>
+                  <article className="card consolePrimaryCard scanInfoCard">
+                    <h2 className="cardTitle">Non-custodial by design</h2>
+                    <p className="hint">
+                      Orbitway never needs your private key to scan. Actions are reviewed separately and signed through
+                      your wallet.
+                    </p>
+                  </article>
+                  <article className="card consolePrimaryCard scanInfoCard scanEmptyState">
+                    <h2 className="cardTitle">Ready when you are</h2>
+                    <p className="hint">Run a read-only scan to see account state, cleanup blockers, and releaseable reserve.</p>
+                  </article>
                 </section>
+              ) : null}
 
-                {!health ? (
-                  <section className="scanInfoRow">
-                    <article className="card consolePrimaryCard scanInfoCard">
-                      <h2 className="cardTitle">What the scan checks</h2>
-                      <ul className="scanCheckList">
-                        {["Recoverable XLM", "Trustlines and offers", "Permissions and signers", "Open positions", "Close readiness"].map((item) => (
-                          <li key={item}>{item}</li>
-                        ))}
-                      </ul>
-                    </article>
-                    <article className="card consolePrimaryCard scanInfoCard">
-                      <h2 className="cardTitle">Non-custodial by design</h2>
-                      <p className="hint">
-                        Orbitway never needs your private key to scan. Actions are reviewed separately and signed
-                        through your wallet.
-                      </p>
-                    </article>
-                    <article className="card consolePrimaryCard scanInfoCard scanEmptyState">
-                      <h2 className="cardTitle">Ready when you are.</h2>
-                      <p className="hint">Run a read-only scan to see account state, cleanup blockers, and recoverable XLM.</p>
-                    </article>
-                  </section>
-                ) : null}
-
-                {health ? (
-                  <section className="card consolePrimaryCard">
-                    <div className="sectionHeaderRow">
+              {health ? (
+                <>
+                  <section className="snapshotSurface">
+                    <div className="sectionHeaderRow sectionHeaderRow--compact">
                       <div>
                         <h2 className="cardTitle">Account health snapshot</h2>
                         <p className={`summary ${health.canDemolish ? "ok" : "warn"}`}>{health.summary}</p>
                       </div>
                     </div>
 
-                    <div className="summaryGrid">
-                      <div className="summaryCard">
-                        <span>Account status</span>
-                        <strong>{accountStatusLabel}</strong>
-                      </div>
-                      <div className="summaryCard">
-                        <span>Recoverable reserve</span>
-                        <strong>{formatXlmCompact(trustlineReserveXlm)}</strong>
-                        <small>
+                    <div className="snapshotBandGrid">
+                      <article className="snapshotBand snapshotBand--state">
+                        <span className="snapshotEyebrow">Account state</span>
+                        <strong className="snapshotValue">{accountStateLabel}</strong>
+                        <p className="snapshotSentence">{health.summary}</p>
+                        <div className="snapshotList">
+                          <div>
+                            <span>Why it matters</span>
+                            <strong>{blocking.length > 0 ? `${blocking.length} blocker${blocking.length === 1 ? "" : "s"}` : "No required blockers"}</strong>
+                          </div>
+                          <div>
+                            <span>Open activity</span>
+                            <strong>{openPositionCount > 0 ? `${openPositionCount} item${openPositionCount === 1 ? "" : "s"}` : "None detected"}</strong>
+                          </div>
+                        </div>
+                      </article>
+                      <article className="snapshotBand snapshotBand--value">
+                        <span className="snapshotEyebrow">Locked value</span>
+                        <strong className="snapshotValue">{reserveReleaseLabel}</strong>
+                        <p className="snapshotSentence">
                           {typeof trustlineReserveXlm === "number"
-                            ? "Estimated XLM locked in active trustlines."
-                            : "Requires trustline scan details."}
-                        </small>
-                      </div>
-                      <div className="summaryCard">
-                        <span>Trustlines</span>
-                        <strong>
-                          {trustlineSummary
-                            ? `${trustlineSummary.total} token line${trustlineSummary.total === 1 ? "" : "s"}`
-                            : trustlinesLabel}
-                        </strong>
-                        {trustlineSummary ? (
-                          <small>
-                            {trustlineSummary.funded} funded · {trustlineSummary.empty} ready to remove
-                          </small>
-                        ) : null}
-                      </div>
-                      <div className="summaryCard">
-                        <span>Open positions</span>
-                        <strong>{openPositionCount} detected</strong>
-                      </div>
-                      <div className="summaryCard">
-                        <span>Manual review</span>
-                        <strong>{protocolReviewCount} protocol check{protocolReviewCount === 1 ? "" : "s"}</strong>
-                      </div>
-                    </div>
-
-                    <AccountStateDetails
-                      embedded
-                      health={health}
-                      checklist={checklist}
-                      walletConnected={Boolean(walletAddress)}
-                      walletBusy={walletBusy}
-                      onConnectWallet={connectWallet}
-                      onCloseStep={() => setActiveSection("close")}
-                      onResolveClassicBlocker={(code) => {
-                        void resolveClassicBlocker(code);
-                      }}
-                      trustlinePanel={
-                        showTrustlineTeardown && health.horizonUrl ? (
-                          <TrustlineTeardownCard
-                            embedded
-                            accountId={sourceTrim}
-                            network={network}
-                            horizonUrl={health.horizonUrl}
-                            walletAddress={walletAddress}
-                            walletMismatch={Boolean(walletMismatch)}
-                            walletBusy={walletBusy}
-                            setWalletBusy={setWalletBusy}
-                            setWalletError={setWalletError}
-                            setActionSuccess={setActionSuccess}
-                            offersBlocked={checklistById.get("classic_open_offers")?.status === "fail"}
-                            onSummaryChange={setTrustlineSummary}
-                            onSubmitted={refreshHealth}
-                          />
-                        ) : undefined
-                      }
-                    />
-
-                    <div className="sectionActions">
-                      <button type="button" className="btn primary" onClick={() => setActiveSection("close")}>
-                        Review close step
-                      </button>
-                      <button
-                        type="button"
-                        className="btn secondary"
-                        onClick={() => saveAccountToWatchlist(sourceTrim, network, health)}
-                      >
-                        {isSaved ? "Saved to Health" : "Save to Health"}
-                      </button>
-                      <button type="button" className="btn secondary" onClick={resetOverview}>
-                        Scan another account
-                      </button>
+                            ? "Estimated reserve release tied to trustline cleanup."
+                            : "The reserve estimate becomes clearer after token-line cleanup is loaded."}
+                        </p>
+                        <div className="snapshotList">
+                          <div>
+                            <span>Trustline cleanup</span>
+                            <strong>{trustlineStateLabel}</strong>
+                          </div>
+                          <div>
+                            <span>Claimable balances</span>
+                            <strong>{claimableBalanceLabel}</strong>
+                          </div>
+                        </div>
+                      </article>
+                      <article className="snapshotBand snapshotBand--review">
+                        <span className="snapshotEyebrow">Manual review</span>
+                        <strong className="snapshotValue">{manualReviewStateLabel}</strong>
+                        <p className="snapshotSentence">Review permissions, shared control, and destination details before final close.</p>
+                        <div className="snapshotList">
+                          <div>
+                            <span>Permissions review</span>
+                            <strong>{permissionStateLabel}</strong>
+                          </div>
+                          <div>
+                            <span>Destination status</span>
+                            <strong>{destinationStateLabel}</strong>
+                          </div>
+                        </div>
+                      </article>
                     </div>
                   </section>
-                ) : null}
 
-                {health ? (
-                  <section className="scanInfoRow">
+                  <AccountStateDetails
+                    embedded
+                    health={health}
+                    checklist={checklist}
+                    walletConnected={Boolean(walletAddress)}
+                    walletBusy={walletBusy}
+                    onConnectWallet={connectWallet}
+                    onCloseStep={() => setActiveSection("close")}
+                    onResolveClassicBlocker={(code) => {
+                      void resolveClassicBlocker(code);
+                    }}
+                    trustlinePanel={
+                      showTrustlineTeardown && health.horizonUrl ? (
+                        <TrustlineTeardownCard
+                          embedded
+                          accountId={sourceTrim}
+                          network={network}
+                          horizonUrl={health.horizonUrl}
+                          walletAddress={walletAddress}
+                          walletMismatch={Boolean(walletMismatch)}
+                          walletBusy={walletBusy}
+                          setWalletBusy={setWalletBusy}
+                          setWalletError={setWalletError}
+                          setActionSuccess={setActionSuccess}
+                          offersBlocked={checklistById.get("classic_open_offers")?.status === "fail"}
+                          onSummaryChange={setTrustlineSummary}
+                          onSubmitted={refreshHealth}
+                        />
+                      ) : undefined
+                    }
+                  />
+
+                  <div className="sectionActions sectionActions--scanFooter">
+                    <button type="button" className="btn primary" onClick={() => setActiveSection("close")}>
+                      Open close flow
+                    </button>
+                    <button type="button" className="btn secondary" onClick={() => saveAccountToWatchlist(sourceTrim, network, health)}>
+                      {isSaved ? "Saved in Health" : "Save to Health"}
+                    </button>
+                    <button type="button" className="btn secondary" onClick={resetOverview}>
+                      Scan another account
+                    </button>
+                  </div>
+
+                  <section className="supportBand supportBand--lower">
                     <article className="card consolePrimaryCard scanInfoCard">
                       <h2 className="cardTitle">What the scan checks</h2>
                       <ul className="scanCheckList">
-                        {["Recoverable XLM", "Trustlines and offers", "Permissions and signers", "Open positions", "Close readiness"].map((item) => (
+                        {scanChecklistLabels.map((item) => (
                           <li key={item}>{item}</li>
                         ))}
                       </ul>
                     </article>
                     <article className="card consolePrimaryCard scanInfoCard">
-                      <h2 className="cardTitle">Non-custodial by design</h2>
+                      <h2 className="cardTitle">Snapshot focus</h2>
                       <p className="hint">
-                        Orbitway never needs your private key to scan. Actions are reviewed separately and signed
-                        through your wallet.
+                        Trustlines, sponsorships, allowances, and close blockers map directly into the report below.
                       </p>
                     </article>
                     <article className="card consolePrimaryCard scanInfoCard">
-                      <h2 className="cardTitle">Snapshot focus</h2>
-                      <p className="hint">
-                        Trustlines, sponsorships, allowances, and close blockers now map directly into the account health
-                        snapshot below with action buttons on each row.
-                      </p>
+                      <h2 className="cardTitle">Non-custodial by design</h2>
+                      <p className="hint">Scanning stays read-only. Signing only happens when you choose a write action.</p>
                     </article>
                   </section>
-                ) : null}
 
-                {health ? (
-                  <details className="card consolePrimaryCard technicalDetails">
-                    <summary>
-                      <span>Technical details</span>
-                      <strong>{checklist.length} scan checks</strong>
-                    </summary>
-                    <ul className="checklistList">
-                      {checklist.map((row) => (
-                        <li
-                          key={row.id}
-                          className={`checklistRow status-${row.status}`}
-                          aria-label={`${row.label}: ${outcomeLabel(row)}`}
-                        >
-                          <span className="checklistBadge" aria-hidden>
-                            {statusGlyph(row.status)}
-                          </span>
-                          <div className="checklistBody">
-                            <div className="checklistLabelRow">
-                              <span className="checklistLabel">{row.label}</span>
-                              <span className={outcomePillClass(row)}>{outcomeLabel(row)}</span>
+                  {health ? (
+                    <details className="technicalDetails technicalDetails--quiet">
+                      <summary>
+                        <span>Technical details</span>
+                        <strong>{checklist.length} checks</strong>
+                      </summary>
+                      <ul className="checklistList">
+                        {checklist.map((row) => (
+                          <li key={row.id} className={`checklistRow status-${row.status}`} aria-label={`${row.label}: ${outcomeLabel(row)}`}>
+                            <span className="checklistBadge" aria-hidden>
+                              {statusGlyph(row.status)}
+                            </span>
+                            <div className="checklistBody">
+                              <div className="checklistLabelRow">
+                                <span className="checklistLabel">{row.label}</span>
+                                <span className={outcomePillClass(row)}>{outcomeLabel(row)}</span>
+                              </div>
+                              {row.detail ? <p className="checklistDetail">{row.detail}</p> : null}
                             </div>
-                            {row.detail ? <p className="checklistDetail">{row.detail}</p> : null}
-                          </div>
-                        </li>
-                      ))}
-                    </ul>
-                  </details>
-                ) : null}
-              </>
-            ) : null}
+                          </li>
+                        ))}
+                      </ul>
+                    </details>
+                  ) : null}
+                </>
+              ) : null}
+            </section>
+          ) : null}
 
-            {activeSection === "health" ? (
-              <>
-                <div className="pageIntro pageHeader">
-                  <div className="pageHeaderCopy">
-                    <SectionKicker>Health</SectionKicker>
-                    <h1>Health</h1>
-                    <p>
-                      Save Stellar addresses you want to monitor for cleanup readiness, permissions, recoverable reserves,
-                      or future close actions.
-                    </p>
-                  </div>
-                  <div className="pageHeaderStatus">
-                    <span>Saved accounts</span>
-                    <strong>{watchlist.length}</strong>
-                    <small>{sourceTrim ? `Current: ${formatAccount(sourceTrim)}` : "Scan first, save later"}</small>
+          {activeSection === "health" ? (
+            <section className="appSection appSection--health">
+              <div className="pageIntro pageHeader pageHeader--compact">
+                <div className="pageHeaderCopy">
+                  <SectionKicker>Health</SectionKicker>
+                  <h1>Saved accounts</h1>
+                  <p>Keep a clean list of accounts you want to revisit for health, cleanup, and final close.</p>
+                </div>
+                <div className="pageHeaderStatus">
+                  <span>Saved accounts</span>
+                  <strong>{watchlist.length}</strong>
+                  <small>{sourceTrim ? `Current: ${formatAccount(sourceTrim)}` : "Scan first, save later"}</small>
+                </div>
+              </div>
+
+              <section className="card consolePrimaryCard watchlistComposer">
+                <div className="watchlistAddRow">
+                  <div className="overviewControlBlock">
+                    <label className="label" htmlFor="watchlist-account">
+                      Add account
+                    </label>
+                    <input
+                      id="watchlist-account"
+                      className="input"
+                      placeholder="G…"
+                      value={watchlistDraft}
+                      onChange={(e) => setWatchlistDraft(e.target.value)}
+                      spellCheck={false}
+                      autoCapitalize="none"
+                    />
                   </div>
                 </div>
+                <div className="sectionActions">
+                  <button
+                    type="button"
+                    className="btn primary"
+                    onClick={() => saveAccountToWatchlist(watchlistDraft, network)}
+                    disabled={!isValidClassicAddress(watchlistDraft.trim())}
+                  >
+                    Save current account
+                  </button>
+                  <button type="button" className="btn secondary" onClick={() => setActiveSection("scan")}>
+                    Scan an account
+                  </button>
+                </div>
+              </section>
 
-                <section className="card consolePrimaryCard">
-                  <div className="watchlistAddRow">
-                    <div className="overviewControlBlock">
-                      <label className="label" htmlFor="watchlist-account">
-                        Add account
-                      </label>
-                      <input
-                        id="watchlist-account"
-                        className="input"
-                        placeholder="G…"
-                        value={watchlistDraft}
-                        onChange={(e) => setWatchlistDraft(e.target.value)}
-                        spellCheck={false}
-                        autoCapitalize="none"
-                      />
-                    </div>
-                    <div className="overviewControlBlock">
-                      <div className="label">Network</div>
-                      <div className="segmented" role="group" aria-label="Health account network">
-                        <button
-                          type="button"
-                          className={`seg ${watchlistNetwork === "testnet" ? "active" : ""}`}
-                          onClick={() => setWatchlistNetwork("testnet")}
-                        >
-                          Testnet
-                        </button>
-                        <button
-                          type="button"
-                          className={`seg ${watchlistNetwork === "mainnet" ? "active" : ""}`}
-                          onClick={() => setWatchlistNetwork("mainnet")}
-                        >
-                          Mainnet
-                        </button>
-                      </div>
-                    </div>
-                  </div>
+              {watchlist.length === 0 ? (
+                <section className="card consolePrimaryCard emptyStateCard">
+                  <h2 className="cardTitle">No saved accounts yet</h2>
+                  <p className="hint">Scan an address and save it to track account health over time.</p>
                   <div className="sectionActions">
-                    <button
-                      type="button"
-                      className="btn primary"
-                      onClick={() => saveAccountToWatchlist(watchlistDraft, watchlistNetwork)}
-                      disabled={!isValidClassicAddress(watchlistDraft.trim())}
-                    >
-                      Save current account
-                    </button>
-                    <button type="button" className="btn secondary" onClick={() => setActiveSection("scan")}>
-                      Scan an account
+                    <button type="button" className="btn primary" onClick={() => setActiveSection("scan")}>
+                      Go to Scan
                     </button>
                   </div>
                 </section>
-
-                {watchlist.length === 0 ? (
-                  <section className="card consolePrimaryCard emptyStateCard">
-                    <h2 className="cardTitle">No saved accounts yet.</h2>
-                    <p className="hint">Scan an address and save it to track account health over time.</p>
-                    <div className="sectionActions">
-                      <button type="button" className="btn primary" onClick={() => saveAccountToWatchlist(watchlistDraft, watchlistNetwork)} disabled={!isValidClassicAddress(watchlistDraft.trim())}>
-                        Save current account
-                      </button>
-                      <button type="button" className="btn secondary" onClick={() => setActiveSection("scan")}>
-                        Scan an account
-                      </button>
-                    </div>
-                  </section>
-                ) : (
-                  <section className="watchlistList">
-                    {watchlist.map((entry) => (
-                      <article key={`${entry.network}:${entry.accountId}`} className="card watchlistItem">
-                        <div className="sectionHeaderRow">
-                          <div>
-                            <h2 className="cardTitle">{formatAccount(entry.accountId)}</h2>
-                            <p className="meta">
-                              {entry.network === "mainnet" ? "Mainnet" : "Testnet"} · {entry.summary ?? "Requires rescan"}
-                            </p>
-                          </div>
-                          <span
-                            className={`statusBadge${
-                              entry.readyToClose ? " statusBadge--ok" : entry.blockersCount ? " statusBadge--warn" : ""
-                            }`}
-                          >
-                            {entry.readyToClose
-                              ? "Technically ready"
-                              : typeof entry.blockersCount === "number"
-                                ? `${entry.blockersCount} blocker${entry.blockersCount === 1 ? "" : "s"}`
-                                : "Not scanned"}
-                          </span>
-                        </div>
-                        <div className="watchlistMetaRow">
-                          <span>Network: {entry.network === "mainnet" ? "Mainnet" : "Testnet"}</span>
-                          <span>Last scanned: {formatLastScanned(entry.lastScannedAt)}</span>
-                          <span>
-                            Recoverable XLM:{" "}
-                            {typeof entry.nativeBalanceXlm === "number"
-                              ? formatXlmCompact(entry.nativeBalanceXlm)
-                              : "Not available"}
-                          </span>
-                          <span>Manual review: {entry.readyToClose ? "Protocol review suggested" : "Requires scan"}</span>
-                        </div>
-                        <div className="sectionActions">
-                          <button type="button" className="btn secondary" onClick={() => selectWatchlistAccount(entry)}>
-                            Select account
-                          </button>
-                          <button
-                            type="button"
-                            className="btn secondary"
-                            disabled={loading}
-                            onClick={() => {
-                              setActiveSection("scan");
-                              void scanAccount(entry.accountId, entry.network, { syncInputs: true });
-                            }}
-                          >
-                            Rescan account
-                          </button>
-                          <button
-                            type="button"
-                            className="btn primary"
-                            onClick={() => {
-                              selectWatchlistAccount(entry, "scan");
-                              if (!health || sourceTrim !== entry.accountId || network !== entry.network) {
-                                void scanAccount(entry.accountId, entry.network, { syncInputs: true });
-                              }
-                            }}
-                          >
-                            View scan
-                          </button>
-                          <button
-                            type="button"
-                            className="btn ghost"
-                            onClick={() => removeFromWatchlist(entry.accountId, entry.network)}
-                          >
-                            Remove account
-                          </button>
-                        </div>
-                      </article>
-                    ))}
-                  </section>
-                )}
-              </>
-            ) : null}
-
-            {activeSection === "close" ? (
-              <>
-                <div className="pageIntro pageHeader">
-                  <div className="pageHeaderCopy">
-                    <SectionKicker>Close Account</SectionKicker>
-                    <h1>{sourceTrim ? "Close Account" : "Select an account to close."}</h1>
-                    <p>
-                      {sourceTrim
-                        ? "Close this Stellar account only after reviewing blockers, protocol surfaces, and destination details."
-                        : "Scan an account or choose one from Health before starting the final close flow."}
-                    </p>
+              ) : (
+                <section className="healthTable" aria-label="Saved accounts">
+                  <div className="healthTableHeader">
+                    <span>Account</span>
+                    <span>Blockers</span>
+                    <span>Health state</span>
+                    <span>Reserve release</span>
+                    <span>Trustline cleanup</span>
+                    <span>Manual review</span>
+                    <span className="healthTableHeaderAction">Action</span>
                   </div>
-                  <div className="pageHeaderStatus">
-                    <span>Close state</span>
-                    <strong>{!sourceTrim || !health ? "Locked" : readyByHealth ? "Ready" : "Blocked"}</strong>
-                    <small>{sourceTrim ? formatAccount(sourceTrim) : "No account selected"}</small>
-                  </div>
-                </div>
-
-                {!sourceTrim ? (
-                  <section className="card consolePrimaryCard emptyStateCard">
-                    <div className="sectionActions">
-                      <button type="button" className="btn primary" onClick={() => setActiveSection("scan")}>
-                        Go to Scan
-                      </button>
-                      <button type="button" className="btn secondary" onClick={() => setActiveSection("health")}>
-                        Open Health
-                      </button>
-                    </div>
-                  </section>
-                ) : !health ? (
-                  <section className="card consolePrimaryCard emptyStateCard">
-                    <h2 className="cardTitle">Requires scan</h2>
-                    <p className="hint">Run a scan first so close readiness and blockers can be verified.</p>
-                    <div className="sectionActions">
-                      <button type="button" className="btn primary" onClick={() => setActiveSection("scan")}>
-                        Go to Scan
-                      </button>
-                      <button type="button" className="btn secondary" disabled={loading} onClick={runHealthCheck}>
-                        {loading ? "Scanning…" : "Scan selected account"}
-                      </button>
-                    </div>
-                  </section>
-                ) : !readyByHealth ? (
-                  <section className="card consolePrimaryCard">
-                    <div className="sectionHeaderRow">
-                      <div>
-                        <h2 className="cardTitle">This account is not ready to close yet.</h2>
-                        <p className="hint">Resolve required rows in Scan before final account close becomes available.</p>
+                  {watchlist.map((entry) => (
+                    <article
+                      key={`${entry.network}:${entry.accountId}`}
+                      className={`healthRowCard${entry.readyToClose ? " healthRowCard--ready" : entry.blockersCount ? " healthRowCard--cleanup" : " healthRowCard--review"}`}
+                    >
+                      <div className="healthRowCell healthRowCell--account" data-label="Account">
+                        <strong>{formatAccount(entry.accountId)}</strong>
+                        <span>{entry.readyToClose ? "Ready for final review" : entry.blockersCount ? "Cleanup needed before close" : "Rescan to refresh status"}</span>
                       </div>
-                      <span className="statusBadge statusBadge--warn">Locked</span>
-                    </div>
-                    {blocking.length > 0 ? (
-                      <div className="actionList">
-                        {blocking.map((blocker) => (
-                          <article key={blocker.code} className="actionCard">
-                            <h3>{blocker.title}</h3>
-                            <p>{blocker.description}</p>
-                          </article>
-                        ))}
+                      <div className="healthRowCell" data-label="Blockers">
+                        <strong>{entry.blockersCount ? `${entry.blockersCount} blocker${entry.blockersCount === 1 ? "" : "s"}` : "None"}</strong>
                       </div>
-                    ) : (
-                      <p className="meta">Unable to verify close readiness. Requires rescan.</p>
-                    )}
-                    <div className="sectionActions">
-                      <button type="button" className="btn primary" onClick={() => setActiveSection("scan")}>
-                        Return to Scan
-                      </button>
-                    </div>
-                  </section>
-                ) : (
-                  <>
-                    {!walletAddress ? (
-                      <section className="card consolePrimaryCard">
-                        <h2 className="cardTitle">Connect wallet to continue.</h2>
-                        <p className="hint">
-                          Close execution requires wallet approval from the selected account owner.
-                        </p>
-                        <div className="sectionActions">
-                          <button type="button" className="btn primary" disabled={walletBusy} onClick={connectWallet}>
-                            {walletBusy ? "Opening…" : "Connect Wallet"}
-                          </button>
-                        </div>
-                      </section>
-                    ) : null}
-
-                    <section className="card consolePrimaryCard">
-                      <div className="sectionHeaderRow">
-                        <div>
-                          <h2 className="cardTitle">Final close review</h2>
-                          <p className="summary ok">Technically ready · Manual protocol review suggested</p>
-                        </div>
-                        <span className="statusBadge statusBadge--ok">Technically ready</span>
+                      <div className="healthRowCell" data-label="Health state">
+                        <strong>{entry.readyToClose ? "Ready" : entry.blockersCount ? "Needs cleanup" : "Needs review"}</strong>
                       </div>
-
-                      <label className="label" htmlFor="dest">
-                        Destination Stellar address
-                      </label>
-                      <input
-                        id="dest"
-                        className="input"
-                        placeholder="G…"
-                        value={destination}
-                        onChange={(e) => setDestination(e.target.value)}
-                        spellCheck={false}
-                        autoCapitalize="none"
-                      />
-                      {!destOk && destination.trim() ? <p className="error">Invalid destination address.</p> : null}
-
-                      <div className="summaryGrid">
-                        <div className="summaryCard">
-                          <span>Selected account</span>
-                          <strong>{formatAccount(sourceTrim)}</strong>
-                        </div>
-                        <div className="summaryCard">
-                          <span>Close readiness</span>
-                          <strong>{health.canDemolish ? "Technically ready" : "Requires review"}</strong>
-                        </div>
-                        <div className="summaryCard">
-                          <span>Final payout estimate</span>
-                          <strong>{formatXlmCompact(health.nativeBalanceXlm)}</strong>
-                        </div>
-                        <div className="summaryCard">
-                          <span>Destination</span>
-                          <strong>{destination.trim() ? formatAccount(destination.trim()) : "Not provided"}</strong>
-                        </div>
+                      <div className="healthRowCell" data-label="Reserve release">
+                        <strong>
+                          {typeof entry.nativeBalanceXlm === "number" ? formatXlmCompact(entry.nativeBalanceXlm) : "Scan again"}
+                        </strong>
                       </div>
-
-                      <div className="closeWarning">
-                        <strong>Closing an account is irreversible.</strong>
-                        <p>
-                          Remaining native XLM will be sent to the destination address. Non-native assets must be
-                          resolved before closing.
-                        </p>
+                      <div className="healthRowCell" data-label="Trustline cleanup">
+                        <strong>{entry.readyToClose ? "Clear" : "Check cleanup"}</strong>
                       </div>
-
-                      <label className="label" htmlFor="close-confirm">
-                        Type CLOSE to continue
-                      </label>
-                      <input
-                        id="close-confirm"
-                        className="input"
-                        value={closeConfirm}
-                        onChange={(e) => setCloseConfirm(e.target.value)}
-                        spellCheck={false}
-                        autoCapitalize="characters"
-                      />
-
-                      <div className="sectionActions">
+                      <div className="healthRowCell" data-label="Manual review">
+                        <strong>{entry.readyToClose ? "Low" : "Review"}</strong>
+                      </div>
+                      <div className="healthRowCell healthRowCell--action" data-label="Action">
                         <button
                           type="button"
-                          className="btn danger"
-                          disabled={!destOk || closeConfirm !== "CLOSE" || !walletAddress || walletBusy || mergeBusy || Boolean(walletMismatch) || !health.horizonUrl}
-                          title="Sign final close in your wallet. This action is irreversible once confirmed on-chain."
-                          onClick={() => void runAccountMerge()}
+                          className="btn primary"
+                          onClick={() => {
+                            selectWatchlistAccount(entry, "scan");
+                            if (!health || sourceTrim !== entry.accountId || network !== entry.network) {
+                              void scanAccount(entry.accountId, entry.network, { syncInputs: true });
+                            }
+                          }}
                         >
-                          {mergeBusy ? "Closing account…" : "Close Account"}
+                          View scan
+                        </button>
+                        <button type="button" className="btn secondary" onClick={() => removeFromWatchlist(entry.accountId, entry.network)}>
+                          Remove
                         </button>
                       </div>
-                      {walletError ? <p className="error">{walletError}</p> : null}
+                    </article>
+                  ))}
+                </section>
+              )}
+            </section>
+          ) : null}
+
+          {activeSection === "close" ? (
+            <section className="appSection appSection--close">
+              <div className="pageIntro pageHeader pageHeader--compact">
+                <div className="pageHeaderCopy">
+                  <SectionKicker>Close Account</SectionKicker>
+                  <h1>{sourceTrim ? "Close account" : "Select an account to close."}</h1>
+                  <p>
+                    {sourceTrim
+                      ? "Keep the final close flow distinct, serious, and irreversible."
+                      : "Scan an account or choose one from Health before starting the final close flow."}
+                  </p>
+                </div>
+                <div className="pageHeaderStatus">
+                  <span>Close state</span>
+                  <strong>{!sourceTrim || !health ? "Locked" : readyByHealth ? "Ready" : "Blocked"}</strong>
+                  <small>{sourceTrim ? formatAccount(sourceTrim) : "No account selected"}</small>
+                </div>
+              </div>
+
+              {!sourceTrim ? (
+                <section className="card consolePrimaryCard emptyStateCard">
+                  <h2 className="cardTitle">Pick an account first</h2>
+                  <p className="hint">Scan an account or open one from Health before you begin the close flow.</p>
+                  <div className="sectionActions">
+                    <button type="button" className="btn primary" onClick={() => setActiveSection("scan")}>
+                      Go to Scan
+                    </button>
+                    <button type="button" className="btn secondary" onClick={() => setActiveSection("health")}>
+                      Open Health
+                    </button>
+                  </div>
+                </section>
+              ) : !health ? (
+                <section className="card consolePrimaryCard emptyStateCard">
+                  <h2 className="cardTitle">Requires scan</h2>
+                  <p className="hint">Run a scan first so close readiness and blockers can be verified.</p>
+                  <div className="sectionActions">
+                    <button type="button" className="btn primary" onClick={() => setActiveSection("scan")}>
+                      Go to Scan
+                    </button>
+                    <button type="button" className="btn secondary" disabled={loading} onClick={runHealthCheck}>
+                      {loading ? "Scanning…" : "Scan selected account"}
+                    </button>
+                  </div>
+                </section>
+              ) : !readyByHealth ? (
+                <section className="card consolePrimaryCard">
+                  <div className="sectionHeaderRow">
+                    <div>
+                      <h2 className="cardTitle">This account still has blockers.</h2>
+                      <p className="hint">Route back to Scan and clear the relevant cleanup rows before closing.</p>
+                    </div>
+                    <span className="statusBadge statusBadge--warn">Blocked</span>
+                  </div>
+                  {blocking.length > 0 ? (
+                    <div className="actionList">
+                      {blocking.map((blocker) => (
+                        <article key={blocker.code} className="actionCard">
+                          <h3>{blocker.title}</h3>
+                          <p>{blocker.description}</p>
+                        </article>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="meta">Unable to verify close readiness. Scan again to refresh the state.</p>
+                  )}
+                  <div className="sectionActions">
+                    <button type="button" className="btn primary" onClick={() => setActiveSection("scan")}>
+                      Review cleanup
+                    </button>
+                  </div>
+                </section>
+              ) : (
+                <>
+                  {!walletAddress ? (
+                    <section className="card consolePrimaryCard">
+                      <h2 className="cardTitle">Connect wallet to continue</h2>
+                      <p className="hint">Close execution requires wallet approval from the selected account owner.</p>
+                      <div className="sectionActions">
+                        <button type="button" className="btn primary" disabled={walletBusy} onClick={connectWallet}>
+                          {walletBusy ? "Opening…" : "Connect Wallet"}
+                        </button>
+                      </div>
                     </section>
-                  </>
-                )}
-              </>
-            ) : null}
-          </section>
+                  ) : null}
+
+                  <section className="card consolePrimaryCard closeReviewSurface">
+                    <div className="sectionHeaderRow">
+                      <div>
+                        <h2 className="cardTitle">Close readiness</h2>
+                        <p className="summary ok">The account can be closed once you confirm the destination and final warning.</p>
+                      </div>
+                      <span className="statusBadge statusBadge--ok">Ready</span>
+                    </div>
+
+                    <div className="closeReviewGrid">
+                      <div className="closeReviewCard">
+                        <span>Final payout / reserve release</span>
+                        <strong>{reserveReleaseLabel}</strong>
+                        <small>Final payout adjusts for fees and destination confirmation.</small>
+                      </div>
+                      <div className="closeReviewCard">
+                        <span>Manual review reminders</span>
+                        <strong>{manualReviewStateLabel}</strong>
+                        <small>Review protocol details before you sign the last transaction.</small>
+                      </div>
+                    </div>
+
+                    <label className="label" htmlFor="dest">
+                      Destination Stellar address
+                    </label>
+                    <input
+                      id="dest"
+                      className="input"
+                      placeholder="G…"
+                      value={destination}
+                      onChange={(e) => setDestination(e.target.value)}
+                      spellCheck={false}
+                      autoCapitalize="none"
+                    />
+                    {!destOk && destination.trim() ? <p className="error">Invalid destination address.</p> : null}
+
+                    <div className="closeWarning">
+                      <strong>Closing an account is irreversible.</strong>
+                      <p>
+                        Native XLM moves to the destination address. Non-native assets and blockers must be cleared
+                        first.
+                      </p>
+                    </div>
+
+                    <div className="closeReviewGrid">
+                      <div className="closeReviewCard">
+                        <span>Destination</span>
+                        <strong>{destination.trim() ? formatAccount(destination.trim()) : "Not provided"}</strong>
+                        <small>Keep this close to the warning so the final step stays obvious.</small>
+                      </div>
+                      <div className="closeReviewCard">
+                        <span>Account state</span>
+                        <strong>{accountStateLabel}</strong>
+                        <small>{health.summary}</small>
+                      </div>
+                    </div>
+
+                    <label className="label" htmlFor="close-confirm">
+                      Type CLOSE to continue
+                    </label>
+                    <input
+                      id="close-confirm"
+                      className="input"
+                      value={closeConfirm}
+                      onChange={(e) => setCloseConfirm(e.target.value)}
+                      spellCheck={false}
+                      autoCapitalize="characters"
+                    />
+
+                    {walletError ? <p className="error">{walletError}</p> : null}
+
+                    <div className="closeActionTray">
+                      <button
+                        type="button"
+                        className="btn secondary"
+                        onClick={() => setActiveSection("scan")}
+                      >
+                        Review cleanup
+                      </button>
+                      <button
+                        type="button"
+                        className="btn danger"
+                        disabled={
+                          !destOk ||
+                          closeConfirm !== "CLOSE" ||
+                          !walletAddress ||
+                          walletBusy ||
+                          mergeBusy ||
+                          Boolean(walletMismatch) ||
+                          !health.horizonUrl
+                        }
+                        title="Sign final close in your wallet. This action is irreversible once confirmed on-chain."
+                        onClick={() => void runAccountMerge()}
+                      >
+                        {mergeBusy ? "Closing account…" : "Close Account"}
+                      </button>
+                    </div>
+                  </section>
+                </>
+              )}
+            </section>
+          ) : null}
         </section>
       </main>
     </div>
