@@ -160,6 +160,9 @@ Current web-specific environment use:
 ## 6. Architecture
 
 The high-level component diagram:
+
+![Screenshot](./system.png)
+
 ```mermaid
 flowchart TB
   subgraph User["User / browser"]
