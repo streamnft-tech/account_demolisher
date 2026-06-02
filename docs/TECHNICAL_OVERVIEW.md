@@ -1,6 +1,6 @@
 # Orbitway Technical Overview
 
-This document describes the current implementation of the Orbitway monorepo: tech stack, local setup, runtime boundaries, and request/data flow. It should be read alongside [ARCHITECTURE_DIAGRAMS.md](./ARCHITECTURE_DIAGRAMS.md), which remains the visual reference for component interactions.
+This document describes the current implementation of the Orbitway monorepo: tech stack, local setup, runtime boundaries, and request/data flow.
 
 ## 1. Purpose
 
@@ -220,7 +220,7 @@ flowchart TB
   IDX -.->|RFP / docs| POS
 ```
 
-Request Sequence:
+### Request Sequence Diagram
 
 ```mermaid
 sequenceDiagram
@@ -350,7 +350,7 @@ At a high level:
 4. The API calls `buildHealthReport` from `@stellar/core`.
 5. The SPA renders `checklist`, `blockers`, `summary`, and `openPositions`.
 
-See the sequence diagram in [ARCHITECTURE_DIAGRAMS.md](./ARCHITECTURE_DIAGRAMS.md#2-sequence-diagram--user-journey-current-spa).
+See the [request sequence diagram](#request-sequence-diagram).
 
 ### Supporting routes
 
