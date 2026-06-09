@@ -36,7 +36,7 @@ Soroban scans use **public RPC** per `?network=` unless **`SOROBAN_RPC_URL`** is
 ## Routes
 
 - `GET /health` — liveness + which Horizon / Soroban RPC URLs are in effect  
-- `GET /api/account/:accountId/health?network=testnet|mainnet` — classic + Soroban health / merge blockers (see `checklist` in JSON). Populates **`openPositions.sdexOffers`** (paginated Horizon offers) and **`openPositions.liquidityPoolShares`** (from account balances).  
+- `GET /api/account/:accountId/health?network=testnet|mainnet` — classic + Soroban health / merge blockers (see `checklist` in JSON). Populates **`nativeBalanceXlm`**, **`classicAccount`** signer/threshold/sponsorship detail, **`openPositions.sdexOffers`** (paginated Horizon offers), and **`openPositions.liquidityPoolShares`** (from account balances). Sponsorship detail includes Horizon-discoverable sponsored entries from `claimable_balances`, `offers`, `liquidity_pools`, and `accounts?sponsor=...`; sponsored data entries may not be discoverable from this scan alone.  
 - `GET /api/order-book?network=…&asset_code=…&asset_issuer=G…` — Horizon SDEX **order book** for selling the credit asset vs **native** (used by the web trustline card; avoids browser CORS to Horizon)
 - `GET /api/account/:accountId/horizon?network=` — raw Horizon account JSON (debug / advanced clients)  
 - `GET /api/account/:accountId/offers?network=` — full SDEX offer rows for the account (used by web cancel flow)  

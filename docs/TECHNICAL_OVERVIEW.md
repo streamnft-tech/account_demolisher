@@ -89,6 +89,7 @@ Important files:
 - [apps/web/src/App.tsx](../apps/web/src/App.tsx): main app UI, health workflow, blocker actions
 - [apps/web/src/walletKit.ts](../apps/web/src/walletKit.ts): wallet-kit initialization and signing helpers
 - [services/api/src/index.ts](../services/api/src/index.ts): API routes and composition layer
+- [services/api/src/fetchSponsoredEntries.ts](../services/api/src/fetchSponsoredEntries.ts): Horizon-discoverable sponsored ledger-entry scan
 - [services/api/src/sorobanScan.ts](../services/api/src/sorobanScan.ts): SAC balance and allowance checks
 - [services/api/src/defiScan.ts](../services/api/src/defiScan.ts): Blend backstop read path
 - [packages/core/src/health.ts](../packages/core/src/health.ts): canonical health checklist and blocker generation
@@ -167,7 +168,8 @@ The high-level component diagram and request sequence already live in [ARCHITECT
 
 - captures user input such as source account, network, and destination account
 - calls API health endpoints
-- renders grouped checklist rows and blockers from `HealthReport`
+- renders a guided scan workspace from `HealthReport`
+- presents scan results as a decision snapshot plus grouped action sections: **Unlock value**, **Account states**, **Open offers & DeFi tools**, and **Close safely**
 - builds or requests XDRs for supported classic cleanup flows
 - uses Stellar Wallets Kit for client-side signing
 
@@ -179,6 +181,7 @@ The web app does not hold server secrets and does not proxy signing through the 
 
 - validating request shape
 - reading classic account state from Horizon
+- discovering supported sponsored ledger-entry rows for sponsorship cleanup context
 - reading Soroban state from RPC
 - reading selected DeFi protocol state, currently Blend
 - composing those slices into a normalized `HealthReport`
@@ -207,6 +210,7 @@ Horizon is used for classic Stellar reads:
 - SDEX offers
 - claimable balances
 - classic liquidity-pool balances
+- sponsored ledger-entry discovery where Horizon exposes `sponsor` filters
 - destination-account existence checks
 
 Default endpoints are network-specific unless `HORIZON_URL` is set.
@@ -242,7 +246,8 @@ At a high level:
 2. The API fetches Horizon account state and classic positions.
 3. In parallel, the API runs Soroban SAC checks and DeFi surface checks.
 4. The API calls `buildHealthReport` from `@stellar/core`.
-5. The SPA renders `checklist`, `blockers`, `summary`, and `openPositions`.
+5. The SPA renders `checklist`, `blockers`, `summary`, `nativeBalanceXlm`, `classicAccount`, and `openPositions`.
+6. The scan UI maps those fields into a compact snapshot and row-based action groups rather than a raw checklist dashboard.
 
 See the sequence diagram in [ARCHITECTURE_DIAGRAMS.md](./ARCHITECTURE_DIAGRAMS.md#2-sequence-diagram--user-journey-current-spa).
 
@@ -255,6 +260,7 @@ Additional API routes serve focused read paths or helper flows:
 | `GET /api/account/:accountId/horizon` | Raw Horizon account payload for debugging/advanced flows |
 | `GET /api/account/:accountId/offers` | Full classic SDEX offers for cancel flows |
 | `GET /api/account/:accountId/claimable-balances` | Inbound claimable balance IDs |
+| `GET /api/account/:accountId/health` | Also includes native XLM balance, classic signer/threshold summary, and Horizon-discoverable sponsored entries when available |
 | `GET /api/order-book` | Classic credit-to-native order book lookup |
 | `GET /api/soroswap/status` | Whether Soroswap helper is configured |
 | `POST /api/soroswap/swap-xdr` | Build Soroswap swap XDR through server-side bearer auth |
@@ -270,6 +276,7 @@ Current write flow is intentionally non-custodial:
 
 Implemented classic write helpers include:
 
+- revoke sponsored reserves, including per-entry revoke rows where a Horizon-discovered entry type is supported
 - remove data entries
 - cancel SDEX offers
 - withdraw LP shares
@@ -283,6 +290,7 @@ Implemented classic write helpers include:
 
 The repo is not yet a full demolition planner/executor. The main technical gaps are:
 
+- sponsored entry discovery is limited to Horizon surfaces currently queried by `fetchSponsoredEntriesForSponsor`; sponsored data entries may still require action-prep or manual follow-up
 - no mediator-account merge flow for exchanges/CEX destinations
 - no full multisig signing workflow across multiple keys or wallets
 - no general Soroban teardown parity

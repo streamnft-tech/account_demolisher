@@ -18,7 +18,7 @@ flowchart TB
 
   subgraph DevHost["Developer machine"]
     subgraph Web["@stellar/web — Vite SPA :5173"]
-      UI[App.tsx — checklist, destination, Orbitway workspace]
+      UI[App.tsx — guided scan workspace, action groups, close flow]
       WK[Stellar Wallets Kit — connect / profile / sign hook]
       CoreC["@stellar/core — types, isValidClassicAddress"]
     end
@@ -26,6 +26,7 @@ flowchart TB
       IDX[index.ts — routes + CORS]
       HZ[horizon.ts — account, offers flags]
       FC[fetchClassicPositions.ts — SDEX offers]
+      SP[fetchSponsoredEntries.ts — sponsored-entry rows]
       SB[sorobanScan.ts — SAC balances, allowances]
       DF[defiScan.ts — Blend SDK → RPC]
       CORE[buildHealthReport — @stellar/core]
@@ -57,6 +58,7 @@ flowchart TB
 
   IDX --> HZ --> H
   IDX --> FC --> H
+  IDX --> SP --> H
   IDX --> SB --> R
   IDX --> SB --> SKD
   IDX --> DF --> BLEND --> R
@@ -76,7 +78,7 @@ flowchart TB
 
 ## 2. Sequence diagram — user journey (current SPA)
 
-Default flow: network + optional wallet connect + source G-address (+ optional destination) → **read-only** `GET .../health` → checklist. Demolish / merge / per-blocker signed fixes remain future work.
+Default flow: network + optional wallet connect + source G-address (+ optional destination) → **read-only** `GET .../health` → decision snapshot and grouped action report. Supported classic cleanup actions are signed client-side through Wallets Kit; planner/simulation/mediator flows remain future work.
 
 ```mermaid
 sequenceDiagram
@@ -92,7 +94,7 @@ sequenceDiagram
 
   User->>Browser: Open app, choose Testnet/Mainnet
   User->>Browser: Enter source G-address (and optional destination)
-  User->>Browser: Click "Run health check"
+  User->>Browser: Click "Scan"
 
   Browser->>Vite: GET /api/account/{G}/health?network=...
   Note over Vite,API: Dev: Vite proxies `/api` → 8787. Production: serve SPA + call API same-origin or configured base URL.
@@ -114,13 +116,14 @@ sequenceDiagram
       API->>RPC: Read SAC / contract state (sorobanScan)
       API->>Blend: Backstop / pool user reads (defiScan + Blend SDK → RPC)
     end
-    API->>Core: buildHealthReport(account, offersCount, soroban, openPositions.defiProtocols)
-    Core-->>API: HealthReport (checklist, blockers, openPositions, summary)
+    API->>Horizon: Fetch sponsored entries where Horizon exposes sponsor filters
+    API->>Core: buildHealthReport(account, offersCount, soroban, openPositions.defiProtocols, sponsoredEntries)
+    Core-->>API: HealthReport (checklist, blockers, nativeBalanceXlm, classicAccount, openPositions, summary)
     API-->>Browser: 200 + JSON
-    Browser-->>User: Show checklist, Horizon/Soroban URLs, blockers, canDemolish
+    Browser-->>User: Show snapshot, next best action, Unlock value, Account states, Open offers & DeFi tools, Close safely
   end
 
-  User->>Browser: Optionally enter destination, read "Demolish" copy
+  User->>Browser: Optionally save destination and sign supported cleanup/close actions
 ```
 
 ### Other API routes (not shown in the sequence above)

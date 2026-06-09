@@ -14,9 +14,9 @@ This document describes **target** product behavior (RFP + roadmap) and **what e
 
 | Requirement | Implemented | To be done |
 |---|---|---|
-| Check existing sponsorships; sponsored reserves block merge | Partial: health detects `num_sponsoring`; UI can build `RevokeSponsorship` batches for some Horizon-discoverable sponsored entries. | Handle all sponsored entry types reliably, especially sponsored data entries; improve multi-pass UX for >100 revokes. |
+| Check existing sponsorships; sponsored reserves block merge | Partial: health detects `num_sponsoring`, estimates reserved XLM, lists Horizon-discoverable sponsored entries, and offers supported revoke actions per row. | Handle all sponsored entry types reliably, especially sponsored data entries; improve multi-pass UX for >100 revokes. |
 | Check multisig on account | Partial: health detects extra signers and non-merge-friendly thresholds. | Add full multisig workflow for gathering signatures from multiple wallets/keys. |
-| Remove extra signers and set thresholds for further manipulation | Partial: removes extra ed25519 signers and sets `masterWeight: 1`, `low: 1`, `med: 0`, `high: 0`. | Support non-ed25519 signer types such as hash/preauth signers; add clearer staged signing flow. |
+| Remove extra signers and set thresholds for further manipulation | Partial: scan report shows signer keys/weights and threshold rows; actions remove extra ed25519 signers and set `masterWeight: 1`, `low: 1`, `med: 0`, `high: 0`. | Support non-ed25519 signer types such as hash/preauth signers; add clearer staged signing flow. |
 | Remove all trustlines | Partial: removes zero-balance classic trustlines; positive balances can be handled asset-by-asset through sell or payout + `ChangeTrust(0)`. | Fully automate non-zero trustline cleanup; add routing when direct XLM order book/Soroswap route is unavailable. |
 | Remove account data entries | Partial: builds `ManageData` delete batches up to 100 entries. | Multi-pass progress UX; better handling for sponsored data entries. |
 | Optionally claim selected claimable balances | Partial: detects inbound claimable balances and can claim them in batches. | Let users select which balances to claim instead of batch-claiming all. |
@@ -30,7 +30,7 @@ This document describes **target** product behavior (RFP + roadmap) and **what e
 | Trust-minimized, non-custodial implementation; all signing client-side; secrets never server-side | Mostly yes for current scope: API is read/read-proxy only; signing happens in browser via Wallets Kit. | Preserve this for future direct secret input and mediator flows; add explicit security docs and tests to ensure secrets never hit API/logs. |
 | Safety features: confirmations, warnings, dry-run/preview mode | Partial: basic warnings and wallet confirmation exist; README proposes rolling dry-run approach. | Implement transaction plan preview, per-step simulation, explicit confirmations, slippage warnings, failure recovery, and post-tx refresh. |
 | Open source, permissive license; stellar.expert/demolisher can be starting point | Partial: repo is open-source in structure, docs reference prior art. | Confirm/add permissive license file; verify stellar.expert code license before reusing any code. |
-| Production-grade UX for irreversible actions | Partial: app has health checklist and guided cleanup actions. | Add polished production flows: staged plan, clear risk states, selection controls, recoverable progress, audit trail, better error handling, and deployment hardening. |
+| Production-grade UX for irreversible actions | Partial: app has a dark-rail/light-canvas shell, scan snapshot, next-best-action strip, row-based cleanup groups, and a distinct close flow. | Add staged plan, recoverable progress, audit trail, better error handling, and deployment hardening. |
 
 ---
 
@@ -38,7 +38,7 @@ This document describes **target** product behavior (RFP + roadmap) and **what e
 
 1. **Scan** a Stellar account (classic + Soroban surface) and produce a **structured report** of blockers and optional cleanup. *(**Partially done:** health report + checklist + `openPositions`.)*  
 2. **Plan** an ordered sequence of transactions (phases) with **human-readable preview** and **simulation** where possible. *(**Not done.**)*  
-3. **Execute** under user control: **client-side signing** only (default: wallets-kit; advanced: local secret with extreme warnings). *(**Partial:** Wallets Kit connected in UI; several **classic** cleanup flows sign + submit from Step 3; Soroban/DeFi writes not built.)*  
+3. **Execute** under user control: **client-side signing** only (default: wallets-kit; advanced: local secret with extreme warnings). *(**Partial:** Wallets Kit connected in UI; several **classic** cleanup flows sign + submit from the grouped scan report / close flow; Soroban/DeFi writes not built.)*  
 4. **Exit** value to a destination: **merge** when possible; **mediator** path when destination cannot accept `ACCOUNT_MERGE`. *(**Not done.**)*  
 5. **Soroban parity** over time via **protocol adapters** (Blend, Aquarius, Soroswap, … per RFP). *(**Started:** Blend read-only adapter in API; others TBD.)*  
 6. **Inspect-only** path: allowances / authorizations / positions **without** teardown. *(**Partial:** allowances appear inside health when env configured; no standalone “inspect app” mode.)*
@@ -64,9 +64,9 @@ Non-goals for the **first vertical slice** remain: custodial signing, server-hel
 
 | ID | Use case | Mode | Primary outcome | In repo today |
 |----|-----------|------|-----------------|---------------|
-| UC-01 | **Account health scan** | Read-only | Report: balances, trustlines, offers, signers, thresholds, sponsorship, claimable balance count, data entries, Soroban SAC balances, DeFi checklist | **Yes**, minus “full position API”; Blend DeFi **read** on health path |
+| UC-01 | **Account health scan** | Read-only | Report: native XLM balance, trustlines, offers, signers, thresholds, sponsorship, claimable balance count, data entries, Soroban SAC balances, DeFi checklist | **Yes**, minus “full position API”; Blend DeFi **read** on health path |
 | UC-02 | **Inspect allowances / authorizations** | Read-only | List Soroban allowance-style state | **Partial** — subset of SAC allowances for configured spenders, embedded in health report; not a full authz explorer |
-| UC-03 | **Classic cleanup only** | Write | Cancel offers → … | **Partial** — subset of classic teardown in Step 3 (see §0); no router/sell, no merge |
+| UC-03 | **Classic cleanup only** | Write | Cancel offers, clear sponsorships, remove signers/rules, trustline cleanup, claimables | **Partial** — subset of classic teardown in scan report action groups (see §0); no full router/sell planner |
 | UC-04 | **Exit to XLM (or chosen base)** | Write | Router / path payments | **No** |
 | UC-05 | **Full demolish + merge to G-address** | Write | Cleanup + merge | **No** |
 | UC-06 | **Demolish + CEX / no-merge destination** | Write | Mediator | **No** |
@@ -114,6 +114,7 @@ Long-term, the SPA talks to a **core engine** (snapshot, planner, router, adapte
 | **Read-only BFF** | `services/api` (Fastify, `@stellar/core`, `@stellar/stellar-sdk`, `@blend-capital/blend-sdk`) | Horizon + Soroban + Blend reads; **no** signing or secrets |
 | **Shared report logic** | `packages/core` (`health.ts`, `positions.ts`, …) | `buildHealthReport`, checklist rules, `DefiProtocolSurface`, LP extraction |
 | **Horizon client** | `services/api/src/horizon.ts`, `fetchClassicPositions.ts` | Account fetch, offers, `hasOpenOffers` |
+| **Sponsored-entry scan** | `services/api/src/fetchSponsoredEntries.ts` | Horizon-discoverable sponsored accounts, offers, pools, trustlines, signers, and claimables for UI row details |
 | **Soroban SAC scan** | `services/api/src/sorobanScan.ts` | RPC + SDK reads for SAC balances / allowances |
 | **DeFi scan (Blend)** | `services/api/src/defiScan.ts` | Blend backstop + reward-zone pools via SDK → same Soroban RPC |
 | **Protocol adapters package** | *Not a separate workspace* | Blend logic lives in API; future adapters may move to `packages/` |
@@ -207,6 +208,7 @@ The live API and web app use **`HealthReport`** from `@stellar/core` (see `packa
 
 - **Top level:** `accountId`, `checklist[]`, `blockers[]`, `canDemolish`, `summary`, `ledgerNetwork`, `horizonUrl`, `sorobanRpcUrl`, `nativeBalanceXlm`, `sequence`  
 - **`checklist`:** rows such as `account_exists`, `classic_open_offers`, `classic_amm_lp_shares`, `soroban_sac_balances`, `soroban_allowances`, `defi_positions`, …  
+- **`classicAccount`:** account-control detail payload used by the scan report, including sponsorship count/entries, signer keys/weights, master key weight, and low/medium/high thresholds  
 - **`openPositions` (when account exists on health path):** `sdexOffers` (may be empty on monolithic health while offer **count** still drives checklist), `liquidityPoolShares` (often derived from Horizon balances inside `buildHealthReport`), `defiProtocols[]` (**Blend scanned** + Aquarius/Soroswap static surfaces)  
 - **`soroban`:** `SorobanScanResult` — RPC URL, `ok`, SAC balance rows, allowance rows, `allowanceCheckIncomplete` when spenders env unset  
 
@@ -324,3 +326,4 @@ Values below match **`services/api/README.md`**. The API reads them from the **p
 | 2026-05-14 | §0 / §1 / §4.4: Wallets Kit connected in `App.tsx`; README gap table aligned |
 | 2026-05-15 | §0: classic sponsorship revoke (Horizon + Wallets Kit) in web; README production table |
 | 2026-05-15 | §5.4 **Trustline removal policy**; §5.3 restored; §0 table (trustline card, `order-book` route); README alignment |
+| 2026-06-03 | Updated implementation snapshot for guided scan workspace, row-based action groups, sponsorship entry details, native XLM balance display, and account-control/threshold action rows |

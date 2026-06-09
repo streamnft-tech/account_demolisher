@@ -38,16 +38,16 @@ const WATCHLIST_STORAGE_KEY = "stellar-sweep-watchlist";
 
 const problemCards = [
   {
-    title: "State you forgot about",
-    body: "Old trustlines, signers, sponsorships, claimable balances, and data entries can stay active even after the account stops being used.",
+    title: "Locked reserves",
+    body: "Trustlines, offers, data entries, signers, sponsorships, liquidity positions, allowances, and Soroban / DeFi activity can keep XLM reserved long after an account stops being used.",
   },
   {
-    title: "Actions that block closure",
-    body: "Open offers, unresolved balances, and active positions can prevent trustline removal or account merge.",
+    title: "Hidden blockers",
+    body: "Any unresolved item can block cleanup, make ACCOUNT_MERGE fail, or leave recoverable XLM behind.",
   },
   {
-    title: "Value left behind",
-    body: "Reserves and small balances remain stuck when users cannot identify the correct cleanup sequence.",
+    title: "Irreversible close",
+    body: "Final account merge is irreversible. Orbitway keeps cleanup and closure separate so users can review every step before signing.",
   },
 ];
 
@@ -76,39 +76,58 @@ const useCaseCards = [
 
 const safetyCards = [
   {
-    title: "Scan without signing",
-    body: "Run a read-only scan first. No wallet approval is needed until you choose a cleanup action.",
+    title: "No signing required to scan",
+    body: "Run a read-only account scan first. Wallet approval starts only when you choose a cleanup action.",
     featured: true,
   },
   {
-    title: "Wallet-signed cleanup",
-    body: "Every cleanup transaction is shown before approval and signed through the user’s wallet.",
+    title: "Cleanup actions are wallet-approved",
+    body: "Every write action stays separate and is approved through the connected wallet.",
   },
   {
     title: "Private keys stay private",
-    body: "Secret keys and signing authority never move to Orbitway servers.",
+    body: "Secret keys and signing authority stay in the user’s wallet and never move to Orbitway servers.",
   },
   {
-    title: "Close only when ready",
-    body: "Account closure remains a separate final step and only becomes available after blockers are resolved.",
+    title: "Final close remains separate",
+    body: "Account closure stays distinct from cleanup and is treated as the irreversible final step.",
   },
 ];
 
 const coverageGroups = [
   {
-    title: "Classic account blockers",
-    body: "Resolve account-level state that commonly prevents cleanup or closure.",
-    items: ["Trustlines", "Open DEX offers", "Claimable balances", "Signers & thresholds", "Sponsorships"],
+    title: "Unlock value",
+    body: "Show balances and reserves users may be able to recover or route before close.",
+    items: [
+      "Native XLM balance",
+      "Estimated reserve release",
+      "Trustline reserves",
+      "Claimable balances",
+      "Routeable asset balances",
+    ],
   },
   {
-    title: "Soroban and DeFi signals",
-    body: "Surface permissions, token balances, and protocol activity that are harder to inspect manually.",
-    items: ["Token balances", "Active allowances", "LP positions", "DeFi positions", "Protocol permissions"],
+    title: "Remove blockers",
+    body: "Group account state that must be resolved before cleanup or final merge can complete safely.",
+    items: [
+      "Sponsorships",
+      "Open offers",
+      "Data entries",
+      "Liquidity positions",
+      "Signer / threshold issues",
+      "Unsupported Soroban / DeFi state",
+    ],
   },
   {
-    title: "Recovery and close actions",
-    body: "Guide users from cleanup planning to reserve recovery and final account closure.",
-    items: ["Reserve recovery", "Asset conversion", "Account closure", "Exchange destination flow", "Mediator account flow"],
+    title: "Close safely",
+    body: "Keep the irreversible step visible, deliberate, and separate from earlier cleanup work.",
+    items: [
+      "Destination status",
+      "Wallet payout",
+      "Exchange memo / tag warnings",
+      "ACCOUNT_MERGE compatibility",
+      "Final close readiness",
+    ],
   },
 ];
 
@@ -243,34 +262,124 @@ function SectionKicker({ children }: { children: ReactNode }) {
   return <div className="sectionKicker">{children}</div>;
 }
 
-function LedgerScene() {
-  const nodes = [
-    ["Trustlines", "12 active", "warn"],
-    ["Allowances", "4 approvals", "warn"],
-    ["Locked reserve", "1.8 XLM recoverable", "ok"],
-    ["Open positions", "3 detected", "info"],
+// Legacy hero result preview kept for quick comparison/revert while the orbital preview is evaluated.
+function AccountHealthResultLegacy() {
+  const cleanupRows = [
+    { step: "1", label: "Clear data entries", detail: "Remove stale account data", value: "+0.50 XLM" },
+    { step: "2", label: "Normalize signers", detail: "remove extra signer", value: "+1.00 XLM" },
+    { step: "3", label: "Cancel sponsorships", detail: "Revoke reserves paid for other entries", value: "+0.50 XLM" },
+    { step: "4", label: "Close DeFi offers", detail: "4 open offers", value: "+3.80 XLM" },
+    { step: "5", label: "Convert assets to XLM", detail: "5 tokens routed", value: "+2.30 XLM" },
+    { step: "6", label: "Remove trustlines", detail: "3 trustlines found", value: "+1.50 XLM" },
+    { step: "7", label: "Prepare account merge", detail: "Set destination before final close", value: "+1.00 XLM" },
   ];
 
   return (
-    <div className="ledgerScene" aria-hidden>
-      <div className="ledgerOrbit ledgerOrbit--outer" />
-      <div className="ledgerOrbit ledgerOrbit--inner" />
-      <div className="ledgerCore">
-        <strong>GABCD...WXYZ</strong>
-        <span>Account Health</span>
-        <em>Needs review</em>
+    <aside className="cleanupPreview accountHealthPreview" aria-label="Example account health result preview">
+      <div className="cleanupPreviewTop">
+        <div>
+          <span>Account health result</span>
+          <strong>GABCD…WXYZ</strong>
+        </div>
+        <em className="healthStatusChip">
+          <span>Scanning</span>
+          <span>Not ready to close</span>
+          <span>7 blockers found</span>
+          <span>Ready to close</span>
+        </em>
       </div>
-      <div className="ledgerNodes">
-        {nodes.map(([label, value, tone], index) => (
-          <div key={label} className={`ledgerNode ledgerNode--${tone}`} style={{ "--node-index": index } as CSSProperties}>
-            <span>{label}</span>
-            <strong>{value}</strong>
+      <ol className="cleanupPlanList">
+        {cleanupRows.map((item) => (
+          <li key={item.label} className="cleanupPlanStep accountHealthStep">
+            <span>{item.step}</span>
+            <div>
+              <strong>{item.label}</strong>
+              <small>{item.detail}</small>
+            </div>
+            <em>{item.value}</em>
+          </li>
+      ))}
+      </ol>
+      <div className="healthProgress">
+        <span aria-label="Animated blockers cleared progress">
+          <b>1 / 7 blockers cleared</b>
+          <b>2 / 7 blockers cleared</b>
+          <b>3 / 7 blockers cleared</b>
+          <b>4 / 7 blockers cleared</b>
+          <b>5 / 7 blockers cleared</b>
+          <b>6 / 7 blockers cleared</b>
+          <b>7 / 7 blockers cleared</b>
+        </span>
+        <div aria-hidden="true">
+          <i />
+        </div>
+      </div>
+      <div className="cleanupPreviewValue">
+        <span>Estimated unlockable reserve</span>
+        <strong>10.60 XLM</strong>
+        <small>Before wallet approval</small>
+      </div>
+    </aside>
+  );
+}
+
+function AccountHealthPreview() {
+  const orbitCards = [
+    { label: "Trustlines", detail: "3 trustlines", value: "+1.50 XLM" },
+    { label: "Open offers", detail: "4 open offers", value: "+2.00 XLM" },
+    { label: "Data entries", detail: "1 data entry", value: "+0.50 XLM" },
+    { label: "Signer settings", detail: "1 extra signer", value: "+0.50 XLM" },
+    { label: "Sponsorships", detail: "Review needed", value: "+0.50 XLM" },
+    { label: "Routeable assets", detail: "5 tokens routed", value: "+2.30 XLM" },
+    { label: "Base reserve", detail: "Final merge", value: "+1.00 XLM" },
+  ];
+
+  return (
+    <aside
+      className="orbitalPreview accountHealthPreview"
+      aria-label="Example orbital account health result preview"
+      data-legacy-preview={AccountHealthResultLegacy.name}
+    >
+      <div className="orbitalRings" aria-hidden="true">
+        <span />
+        <span />
+        <span />
+      </div>
+      <div className="orbitalStatusPill" aria-hidden="true">
+        <span className="orbitalStatusDot" />
+        <strong className="orbitalStatusText">
+          <span>Scan complete · blockers found</span>
+          <span>Blockers Resolved. Ready for merge.</span>
+        </strong>
+      </div>
+      <div className="orbitalCenter">
+        <strong>GABCD...WXYZ</strong>
+      </div>
+      <div className="orbitalCards">
+        {orbitCards.map((item, index) => (
+          <div
+            key={item.label}
+            className="orbitalCard"
+            style={{ "--orbit-index": index } as CSSProperties}
+          >
+            <span>{item.label}</span>
+            <strong>
+              <b>{item.detail}</b>
+              <b>{item.value}</b>
+            </strong>
           </div>
         ))}
       </div>
-      <div className="ledgerRail ledgerRail--one" />
-      <div className="ledgerRail ledgerRail--two" />
-    </div>
+      <div className="orbitalReserveTrail" aria-hidden="true">
+        <i />
+      </div>
+      <div className="orbitalBottom">
+        <div className="orbitalReserve">
+          <span>Recovered reserve</span>
+          <strong>8.30 XLM</strong>
+        </div>
+      </div>
+    </aside>
   );
 }
 
@@ -295,11 +404,14 @@ function LandingPage() {
         <div className="brand">
           <img className="brandMark" src="/orbitway-logo.png" alt="" />
           <div>
-            <div className="brandName">Orbitway</div>
+            <div className="brandName">Orbit<span className="brandNameAccent">way</span></div>
             <div className="brandTag">Account health and cleanup</div>
           </div>
         </div>
         <div className="nav nav--desktop nav--actions">
+          <NavLink href="#how-it-works" muted>
+            How it works
+          </NavLink>
           <NavLink href="#docs" muted>
             Docs
           </NavLink>
@@ -312,6 +424,9 @@ function LandingPage() {
           </button>
           {menuOpen ? (
             <div className="mobileMenu" id="landing-mobile-menu">
+              <NavLink href="#how-it-works" muted>
+                How it works
+              </NavLink>
               <NavLink href="#docs" muted>
                 Docs
               </NavLink>
@@ -323,12 +438,21 @@ function LandingPage() {
       <main className="landing">
         <section className="hero" id="scan">
           <div className="heroCopy">
-            <SectionKicker>Non-custodial account health and cleanup for Stellar</SectionKicker>
-            <h1>Clean up your Stellar account safely.</h1>
+            <SectionKicker>Non-custodial Stellar account cleanup</SectionKicker>
+            <h1>
+              Recover <span className="heroAccentWord heroAccentWord--locked">locked</span> XLM by clearing Stellar
+              account <span className="heroAccentWord heroAccentWord--blockers">blockers</span>.
+            </h1>
             <p className="heroText">
-              Scan a public Stellar address to review trustlines, allowances, open positions, and locked reserves in
-              one place before taking any cleanup or merge action. No signing required to scan.
+              Orbitway scans your account, finds what is keeping reserves locked, and turns trustlines, offers,
+              signers, sponsorships, data entries, liquidity positions, and Soroban / DeFi activity into a
+              step-by-step cleanup path.
             </p>
+            <div className="safetyMeta" aria-label="Orbitway safety promises">
+              <span>Read-only scan</span>
+              <span>Wallet approval only for cleanup</span>
+              <span>Private keys stay in your wallet</span>
+            </div>
             <form
               className="heroSearch"
               onSubmit={(event) => {
@@ -342,7 +466,7 @@ function LandingPage() {
               <input
                 id="hero-address"
                 className="heroInput"
-                placeholder="Stellar account address"
+                placeholder="Paste Stellar address"
                 value={heroAddress}
                 onChange={(event) => setHeroAddress(event.target.value)}
                 spellCheck={false}
@@ -350,22 +474,31 @@ function LandingPage() {
               />
               <div className="heroSearchActions">
                 <button type="submit" className="btn primary heroSubmit">
-                  Scan Account
+                  Scan account
                 </button>
               </div>
             </form>
+            <div className="heroActions">
+              <NavLink href="#how-it-works" muted>
+                See how it works
+              </NavLink>
+            </div>
           </div>
-          <LedgerScene />
+          <AccountHealthPreview />
         </section>
 
         <section className="infoGrid infoGrid--landing" id="problem">
           <article className="contentCard problemCopy">
             <SectionKicker>Problem</SectionKicker>
-            <h2>Stellar accounts get stuck in hidden state.</h2>
+            <h2>Your XLM can stay locked behind account state you no longer use.</h2>
             <p>
-              A Stellar account can hold hidden state across assets, permissions, reserves, and DeFi activity. When
-              users cannot see what is active or what must be resolved first, accounts get abandoned and recoverable
-              value stays behind.
+              A Stellar account can keep reserves locked through trustlines, offers, data entries, signers,
+              sponsorships, liquidity positions, allowances, and Soroban / DeFi activity long after the account stops
+              being used.
+            </p>
+            <p>
+              Any unresolved item can block cleanup, make <code>ACCOUNT_MERGE</code> fail, or leave recoverable XLM
+              behind.
             </p>
           </article>
           <div className="problemReasons">
@@ -381,7 +514,7 @@ function LandingPage() {
         <section className="stepsSection" id="how-it-works">
           <div className="sectionHeading">
             <SectionKicker>How it works</SectionKicker>
-            <h2>Safely scan, clean, and close your account.</h2>
+            <h2>Scan first. Clean in order. Close only when ready.</h2>
             <p>
               Orbitway separates account inspection, cleanup, and final account closure so users never jump
               straight into irreversible actions.
@@ -392,12 +525,12 @@ function LandingPage() {
               [
                 "1",
                 "Scan",
-                "See active state, recoverable reserves, permissions, and blockers before approving any transaction.",
+                "See reserves, trustlines, sponsorships, permissions, and blockers before approving any transaction.",
               ],
               [
                 "2",
-                "Review",
-                "Understand which actions are required, which are optional, and which are irreversible.",
+                "Understand",
+                "Separate unlockable value from account-state blockers and manual review items.",
               ],
               [
                 "3",
@@ -406,13 +539,15 @@ function LandingPage() {
               ],
               [
                 "4",
-                "Close",
+                "Close safely",
                 "Close the account only after blockers are cleared, then route remaining funds to your chosen wallet or exchange destination.",
               ],
             ].map(([num, title, body]) => (
               <article key={title} className="stepCard">
-                <div className="stepNumber">{num}</div>
-                <h3>{title}</h3>
+                <div className="stepHeader">
+                  <div className="stepNumber">{num}</div>
+                  <h3>{title}</h3>
+                </div>
                 <p>{body}</p>
               </article>
             ))}
@@ -445,10 +580,10 @@ function LandingPage() {
         <section className="coverageSection" id="coverage">
           <div className="sectionHeading">
             <SectionKicker>Coverage</SectionKicker>
-            <h2>Everything that can block a clean exit.</h2>
+            <h2>Everything that can block cleanup, grouped by the action it affects.</h2>
             <p>
-              From trustlines and offers to allowances, reserves, and DeFi positions, Orbitway helps surface the
-              account state users need to review before cleanup.
+              Orbitway translates protocol-level account state into simple decisions: what can be recovered, what must
+              be cleared, and when the account is ready to merge or payout.
             </p>
           </div>
           <div className="coverageGrid">
@@ -458,7 +593,15 @@ function LandingPage() {
                 <p>{group.body}</p>
                 <ul>
                   {group.items.map((item) => (
-                    <li key={item}>{item}</li>
+                    <li key={item}>
+                      {item === "ACCOUNT_MERGE compatibility" ? (
+                        <>
+                          <code>ACCOUNT_MERGE</code> compatibility
+                        </>
+                      ) : (
+                        item
+                      )}
+                    </li>
                   ))}
                 </ul>
               </article>
@@ -492,7 +635,7 @@ function LandingPage() {
             <h2>Account cleanup logic teams do not need to rebuild.</h2>
             <p>
               Wallets, exchanges, explorers, and support teams can integrate Orbitway&apos;s account-state
-              visibility and cleanup guidance instead of building custom flows from scratch.
+              visibility and cleanup guidance after the consumer scan workflow is clear.
             </p>
             <NavLink href="#docs">Built to integrate</NavLink>
           </div>
@@ -508,8 +651,8 @@ function LandingPage() {
 
         <section className="finalCta" id="docs">
           <SectionKicker>Start here</SectionKicker>
-          <h2>Start with a scan. Decide what to clean later.</h2>
-          <p>See the state of any Stellar account before signing, cleaning, or closing anything.</p>
+          <h2>Start with a scan. See what&apos;s keeping XLM locked.</h2>
+          <p>Inspect any Stellar account before signing, cleaning, or closing anything.</p>
           <form
             className="heroSearch heroSearch--final"
             onSubmit={(event) => {
@@ -523,7 +666,7 @@ function LandingPage() {
             <input
               id="final-address"
               className="heroInput"
-              placeholder="Stellar account address"
+              placeholder="Paste Stellar address"
               value={heroAddress}
               onChange={(event) => setHeroAddress(event.target.value)}
               spellCheck={false}
@@ -531,7 +674,7 @@ function LandingPage() {
             />
             <div className="heroSearchActions">
               <button type="submit" className="btn primary heroSubmit">
-                Scan Account
+                Scan account
               </button>
             </div>
           </form>
@@ -540,8 +683,8 @@ function LandingPage() {
         <footer className="footer">
           <div className="footerGrid">
             <div className="footerBrand">
-              <div className="footerBrandName">Orbitway</div>
-              <p>A non-custodial account health and cleanup tool for Stellar.</p>
+              <div className="footerBrandName">Orbit<span className="brandNameAccent">way</span></div>
+              <p>A non-custodial account health, cleanup, and locked XLM recovery tool for Stellar.</p>
             </div>
 
             <div className="footerColumn">
@@ -576,7 +719,7 @@ function LandingPage() {
           </div>
 
           <div className="footerLegal">Orbitway is non-custodial. Users review and approve cleanup actions through their own wallets.</div>
-          <div className="footerBottom">© 2026 Orbitway. Account health and cleanup infrastructure for Stellar.</div>
+          <div className="footerBottom">© 2026 Orbitway. Account health, reserve recovery, and safe-exit infrastructure for Stellar.</div>
         </footer>
       </main>
     </div>
@@ -758,8 +901,8 @@ function rowActionFor(
     classic_claimable_balances: { code: "CLAIMABLE_BALANCES_PENDING", label: "Claim balance" },
     classic_sponsorship: { code: "SPONSORING_OTHER_ACCOUNTS", label: "Revoke sponsored reserves" },
     classic_data_entries: { code: "DATA_ENTRIES", label: "Remove data entries" },
-    classic_extra_signers: { code: "MULTISIG_OR_EXTRA_SIGNERS", label: "Review signers" },
-    classic_thresholds: { code: "NON_DEFAULT_THRESHOLDS", label: "Review approval rules" },
+    classic_extra_signers: { code: "MULTISIG_OR_EXTRA_SIGNERS", label: "Remove extra signers" },
+    classic_thresholds: { code: "NON_DEFAULT_THRESHOLDS", label: "Set merge-friendly rules" },
     classic_amm_lp_shares: { code: "OPEN_LIQUIDITY_POOL", label: "Close position" },
   };
   if (row.id === "classic_trustlines") {
@@ -912,49 +1055,135 @@ function SponsorshipRowDetails({
   );
 }
 
-function PermissionRowDetails({ health, row }: { health: HealthReport; row: HealthChecklistItem | undefined }) {
+function PermissionRowDetails({
+  health,
+  row,
+  action,
+}: {
+  health: HealthReport;
+  row: HealthChecklistItem | undefined;
+  action?: { label: string; disabled?: boolean; onClick?: () => void };
+}) {
   const account = health.classicAccount;
   if (!account) return <p>{row?.detail ?? "Permission details were not returned by this scan."}</p>;
   const isExtraSignerRow = row?.id === "classic_extra_signers";
   const isThresholdRow = row?.id === "classic_thresholds";
   if (!isExtraSignerRow && !isThresholdRow) return <p>{row?.detail ?? "Review this permission state before write actions."}</p>;
+  const detailActionLabel =
+    action?.label === "Connect Wallet" || action?.label.includes("Preparing")
+      ? action.label
+      : isExtraSignerRow
+        ? "Remove signer"
+        : "Set rules";
+
+  if (isExtraSignerRow) {
+    return (
+      <div className="scanInsightBlock permissionDetailBlock">
+        <p>
+          These are keys allowed to approve actions for this account. This scan shows who can control this account; it does
+          not prove where this account is a signer on someone else's multisig.
+        </p>
+        <div className="permissionEntryList">
+          <div className="permissionEntryListHeader">
+            <strong>
+              Extra signers found: {account.signers.extra.length}
+            </strong>
+            <span>master key weight {account.signers.masterWeight}</span>
+          </div>
+          {account.signers.extra.length > 0 ? (
+            account.signers.extra.map((signer) => (
+              <article key={signer.key} className="permissionEntry resultActionRow resultActionRow--state">
+                <div className="permissionEntryMain">
+                  <strong className="monoDetail">{formatLongKey(signer.key)}</strong>
+                  <p>Additional signer allowed to approve account actions.</p>
+                </div>
+                <div className="permissionEntryMetric">
+                  <span>Weight</span>
+                  <strong>{signer.weight}</strong>
+                </div>
+                <div className="permissionEntryMetric">
+                  <span>Cleanup effect</span>
+                  <strong>Remove signer</strong>
+                </div>
+                <button
+                  type="button"
+                  className={action?.disabled ? "btn ghost permissionEntryAction" : "btn secondary permissionEntryAction"}
+                  disabled={action?.disabled}
+                  onClick={(event) => {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    action?.onClick?.();
+                  }}
+                >
+                  {detailActionLabel}
+                </button>
+              </article>
+            ))
+          ) : (
+            <article className="permissionEntry resultActionRow resultActionRow--state">
+              <div className="permissionEntryMain">
+                <strong>Single account control</strong>
+                <p>No additional signer keys were returned by the latest scan.</p>
+              </div>
+              <span className="stateValue stateValue--pass">Clear</span>
+            </article>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  const thresholdRows = [
+    ["Low threshold", account.thresholds.low, "Low-risk account actions"],
+    ["Medium threshold", account.thresholds.medium, "Most cleanup and account update actions"],
+    ["High threshold", account.thresholds.high, "High-impact account actions"],
+    ["Master key weight", account.signers.masterWeight, "Native authority for this account"],
+  ] as const;
 
   return (
-    <div className="scanInsightBlock">
+    <div className="scanInsightBlock permissionDetailBlock">
       <p>
-        These are keys allowed to approve actions for this account. This scan shows who can control this account; it does not
-        prove where this account is a signer on someone else's multisig.
+        These approval rules decide how much signer weight is needed for account actions. Merge-friendly rules make cleanup
+        and final close easier to complete.
       </p>
-      <dl className="authorityGrid">
-        <div>
-          <dt>Master key weight</dt>
-          <dd>{account.signers.masterWeight}</dd>
+      <div className="permissionEntryList">
+        <div className="permissionEntryListHeader">
+          <strong>Approval rules</strong>
+          <span>{account.thresholds.mergeFriendly ? "merge-friendly" : "needs cleanup"}</span>
         </div>
-        <div>
-          <dt>Extra signers</dt>
-          <dd>{account.signers.extra.length}</dd>
-        </div>
-        <div>
-          <dt>Thresholds</dt>
-          <dd>
-            low {account.thresholds.low} / med {account.thresholds.medium} / high {account.thresholds.high}
-          </dd>
-        </div>
-        <div>
-          <dt>Merge-friendly</dt>
-          <dd>{account.thresholds.mergeFriendly ? "Yes" : "Needs cleanup"}</dd>
-        </div>
-      </dl>
-      {account.signers.extra.length > 0 ? (
-        <ul className="signerList">
-          {account.signers.extra.map((signer) => (
-            <li key={signer.key}>
-              <span className="monoDetail">{formatLongKey(signer.key)}</span>
-              <strong>weight {signer.weight}</strong>
-            </li>
-          ))}
-        </ul>
-      ) : null}
+        {thresholdRows.map(([label, value, detail]) => (
+          <article key={label} className="permissionEntry resultActionRow resultActionRow--state">
+            <div className="permissionEntryMain">
+              <strong>{label}</strong>
+              <p>{detail}</p>
+            </div>
+            <div className="permissionEntryMetric">
+              <span>Current value</span>
+              <strong>{value}</strong>
+            </div>
+            <div className="permissionEntryMetric">
+              <span>Target state</span>
+              <strong>{label === "Master key weight" ? "1" : "Merge-friendly"}</strong>
+            </div>
+            {account.thresholds.mergeFriendly ? (
+              <span className="stateValue stateValue--pass">Clear</span>
+            ) : (
+              <button
+                type="button"
+                className={action?.disabled ? "btn ghost permissionEntryAction" : "btn secondary permissionEntryAction"}
+                disabled={action?.disabled}
+                onClick={(event) => {
+                  event.preventDefault();
+                  event.stopPropagation();
+                  action?.onClick?.();
+                }}
+              >
+                {detailActionLabel}
+              </button>
+            )}
+          </article>
+        ))}
+      </div>
     </div>
   );
 }
@@ -1133,6 +1362,43 @@ function AccountStateDetails({
                     </article>
                   );
                 }
+                if (row?.id === "classic_extra_signers" || row?.id === "classic_thresholds") {
+                  const action = rowActionFor(row, {
+                    walletConnected,
+                    walletBusy,
+                    onConnectWallet,
+                    onCloseStep,
+                    onTrustlinePlanner,
+                    onResolveClassicBlocker,
+                    pendingClassicAction,
+                  });
+                  return (
+                    <article key={label} className={`scanReportRow scanReportRow--${group.id} scanReportRow--permissions`}>
+                      <div className="scanReportReserveHeader scanReportReserveHeader--permissions">
+                        <div className="scanReportMain">
+                          <span>{label}</span>
+                          <p>{copy.detail}</p>
+                        </div>
+                        <strong className={`stateValue stateValue--${copy.tone}`}>{copy.value}</strong>
+                        <button
+                          type="button"
+                          className={action.disabled ? "btn ghost scanReportAction" : "btn secondary scanReportAction"}
+                          disabled={action.disabled}
+                          onClick={(event) => {
+                            event.preventDefault();
+                            event.stopPropagation();
+                            action.onClick?.();
+                          }}
+                        >
+                          {action.label}
+                        </button>
+                      </div>
+                      <div className="scanReportEmbeddedPanel scanReportEmbeddedPanel--inline">
+                        <PermissionRowDetails health={health} row={row} action={action} />
+                      </div>
+                    </article>
+                  );
+                }
                 const action =
                   label === "Destination"
                     ? { label: destOk ? "Edit destination" : "Save destination", onClick: onSetDestination }
@@ -1182,7 +1448,7 @@ function AccountStateDetails({
                           onRevokeEntry={onRevokeSponsoredEntry}
                         />
                       ) : row?.id === "classic_extra_signers" || row?.id === "classic_thresholds" ? (
-                        <PermissionRowDetails health={health} row={row} />
+                        <PermissionRowDetails health={health} row={row} action={action} />
                       ) : (
                         <p>{row?.detail ?? copy.detail}</p>
                       )}
@@ -1694,7 +1960,7 @@ function AppShell() {
             <div className="brand">
               <img className="brandMark" src="/orbitway-logo.png" alt="" />
               <div>
-                <div className="brandName">Orbitway</div>
+                <div className="brandName">Orbit<span className="brandNameAccent">way</span></div>
                 <div className="brandTag">Account health and cleanup</div>
               </div>
             </div>
