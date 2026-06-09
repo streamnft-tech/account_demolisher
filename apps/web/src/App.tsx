@@ -336,45 +336,70 @@ function AccountHealthPreview() {
 
   return (
     <aside
-      className="orbitalPreview accountHealthPreview"
+      className="accountHealthPreview"
       aria-label="Example orbital account health result preview"
       data-legacy-preview={AccountHealthResultLegacy.name}
     >
-      <div className="orbitalRings" aria-hidden="true">
-        <span />
-        <span />
-        <span />
-      </div>
-      <div className="orbitalStatusPill" aria-hidden="true">
-        <span className="orbitalStatusDot" />
-        <strong className="orbitalStatusText">
-          <span>Scan complete · blockers found</span>
-          <span>Blockers Resolved. Ready for merge.</span>
-        </strong>
-      </div>
-      <div className="orbitalCenter">
-        <strong>GABCD...WXYZ</strong>
-      </div>
-      <div className="orbitalCards">
-        {orbitCards.map((item, index) => (
-          <div
-            key={item.label}
-            className="orbitalCard"
-            style={{ "--orbit-index": index } as CSSProperties}
-          >
-            <span>{item.label}</span>
-            <strong>
-              <b>{item.detail}</b>
-              <b>{item.value}</b>
-            </strong>
+      <div className="orbitalPreview orbitalPreview--desktop" aria-hidden="true">
+        <div className="orbitalRings" aria-hidden="true">
+          <span />
+          <span />
+          <span />
+        </div>
+        <div className="orbitalStatusPill" aria-hidden="true">
+          <span className="orbitalStatusDot" />
+          <strong className="orbitalStatusText">
+            <span>Scan complete · blockers found</span>
+            <span>Blockers Resolved. Ready for merge.</span>
+          </strong>
+        </div>
+        <div className="orbitalCenter">
+          <strong>GABCD...WXYZ</strong>
+        </div>
+        <div className="orbitalCards">
+          {orbitCards.map((item, index) => (
+            <div
+              key={item.label}
+              className="orbitalCard"
+              style={{ "--orbit-index": index } as CSSProperties}
+            >
+              <span>{item.label}</span>
+              <strong>
+                <b>{item.detail}</b>
+                <b>{item.value}</b>
+              </strong>
+            </div>
+          ))}
+        </div>
+        <div className="orbitalReserveTrail" aria-hidden="true">
+          <i />
+        </div>
+        <div className="orbitalBottom">
+          <div className="orbitalReserve">
+            <span>Recovered reserve</span>
+            <strong>8.30 XLM</strong>
           </div>
-        ))}
+        </div>
       </div>
-      <div className="orbitalReserveTrail" aria-hidden="true">
-        <i />
-      </div>
-      <div className="orbitalBottom">
-        <div className="orbitalReserve">
+
+      <div className="mobileHealthPreview">
+        <div className="mobileHealthPreviewTop">
+          <span className="mobileHealthStatusDot" />
+          <strong>Scan complete · blockers found</strong>
+        </div>
+        <div className="mobileHealthAccount">GABCD...WXYZ</div>
+        <div className="mobileHealthRows">
+          {orbitCards.map((item) => (
+            <div key={item.label} className="mobileHealthRow">
+              <div className="mobileHealthRowCopy">
+                <span>{item.label}</span>
+                <strong>{item.detail}</strong>
+              </div>
+              <em>{item.value}</em>
+            </div>
+          ))}
+        </div>
+        <div className="mobileHealthReserve">
           <span>Recovered reserve</span>
           <strong>8.30 XLM</strong>
         </div>
