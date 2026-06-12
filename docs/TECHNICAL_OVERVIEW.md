@@ -1,73 +1,324 @@
-# Orbitway Technical Overview
+# OrbitWay Technical Overview
 
-This document describes the current implementation of the Orbitway monorepo: tech stack, local setup, runtime boundaries, and request/data flow.
+OrbitWay is a Stellar account inspection, cleanup, and recovery workflow application. It helps users scan a Stellar account, understand why it cannot be safely closed or merged, and move through the required cleanup steps to recover remaining value or reach a merge-ready state.
 
-## 1. Purpose
+The technical problem OrbitWay addresses is that Stellar account state is distributed across multiple surfaces. A single account may contain native XLM, non-native trustlines, open SDEX offers, claimable balances, sponsorships, multisig signers, account data entries, classic liquidity-pool positions, Soroban assets, token allowances, or protocol-level exposure. Any of these can affect whether the account can be safely cleaned up or merged.
 
-Orbitway is a Stellar account inspection and cleanup application. The current repo implements:
+OrbitWay converts this fragmented state into a normalized account-health report. The report explains which parts of the account are clean, which objects are blocking cleanup, which actions require user review, and which states are currently unsupported or unsafe to close. The application is designed as a step-by-step cleanup workflow: scan the account, detect blockers, explain the cleanup plan, prepare supported actions, request wallet-side signing, refresh account state, and continue until the account is either merge-ready or clearly blocked.
 
-- a React SPA for running account health checks and triggering selected classic cleanup actions
-- a Fastify API that aggregates Horizon, Soroban RPC, and selected DeFi reads
-- a shared TypeScript package containing health-report types and pure decision logic
+The current implementation is structured as a TypeScript monorepo with three main runtime boundaries: a React/Vite web application, a Fastify API service, and a shared TypeScript core package. The web application owns the user workflow, wallet connection, transaction review, and signing flow. The API aggregates read-only network data from Horizon, Soroban RPC, and selected protocol integrations. The shared core package contains the health-report model, blocker types, and account-readiness logic used across the system.
 
-The codebase is intentionally split so that:
+OrbitWay is intentionally non-custodial. Account scans are read-only, private keys are never sent to the backend, and cleanup transactions require explicit user approval through wallet-side signing. Account merge is treated as the final irreversible step and is only enabled after supported blockers have been resolved and unsupported state has been ruled out or clearly surfaced.
 
-- network I/O lives in the API or the browser wallet layer
-- domain rules live in `@stellar/core`
-- UI state and signing flow live in `@stellar/web`
+The sections below first explain the user cleanup journey, then show the system architecture that supports it, followed by the safety model, implementation scope, account-health logic, limitations, and development details.
 
-## 2. Tech Stack
+---
 
-### Workspace layout
+## 1. User Journey
 
-The repo uses npm workspaces declared in [package.json](../package.json).
+The OrbitWay user journey begins with a source Stellar account. The user selects a network, enters the account address, and runs a health check. OrbitWay reads the account state from Stellar network services and returns a structured health report.
+
+If blockers are found, OrbitWay groups them by category and explains the required next action. Some blockers may be directly removable, such as empty trustlines, account data entries, or open SDEX offers. Others may require review, such as positive-balance trustlines, claimable balances, multisig configuration, LP positions, Soroban assets, or DeFi exposure.
+
+After the user reviews the cleanup plan, OrbitWay prepares supported transaction steps. The user signs each action through a wallet-based flow. After every transaction, OrbitWay refreshes account state and recalculates the remaining blockers. Account merge is only presented after the account is confirmed to be merge-ready.
+
+```mermaid
+flowchart LR
+  A["Enter Stellar Account"] --> B["Run Health Check"]
+  B --> C["Detect Blockers"]
+  C --> D["Explain Cleanup Plan"]
+  D --> E["User Reviews Actions"]
+  E --> F["Wallet Signs Transactions"]
+  F --> G["Refresh Account State"]
+  G --> H["Merge-ready / Recovery Complete"]
+```
+
+---
+
+## 2. System Architecture
+
+OrbitWay is split into three main runtime boundaries: the web application, the API service, and the shared core package. This separation keeps network reads, domain rules, and signing interactions isolated from each other.
+
+The web application manages the user interface, wallet connection, transaction review, and client-side signing. The API service performs read-oriented aggregation across Horizon, Soroban RPC, and selected protocol surfaces. The shared core package converts raw account state into a normalized health report with checklist rows, blockers, open positions, summary data, and merge-readiness signals.
+
+This separation preserves the non-custodial signing model while allowing the API to centralize network reads and the shared core package to keep account-readiness rules reusable across the system.
+
+```mermaid
+flowchart TB
+  subgraph User["User / browser"]
+    U[Operator]
+  end
+
+  subgraph DevHost["Developer machine"]
+    subgraph Web["@stellar/web — Vite SPA"]
+      UI[App.tsx — checklist, destination, Orbitway workspace]
+      WK[Stellar Wallets Kit — connect / profile / sign hook]
+      CoreC["@stellar/core — types, isValidClassicAddress"]
+    end
+    subgraph API["@stellar/api — Fastify"]
+      IDX[index.ts — routes + CORS]
+      HZ[horizon.ts — account, offers flags]
+      FC[fetchClassicPositions.ts — SDEX offers]
+      SB[sorobanScan.ts — SAC balances, allowances]
+      DF[defiScan.ts — Blend SDK → RPC]
+      CORE[buildHealthReport — @stellar/core]
+    end
+    PROXY[Vite proxy `/api`]
+  end
+
+  subgraph Ext["External Stellar network"]
+    H[(Horizon — classic REST)]
+    R[(Soroban RPC — getLedgerEntries / reads)]
+    BC[(Blend contracts on ledger — via RPC)]
+  end
+
+  subgraph Deps["NPM libraries"]
+    SKD["@stellar/stellar-sdk"]
+    BLEND["@blend-capital/blend-sdk"]
+  end
+
+  U --> UI
+  UI --> WK
+  UI --> CoreC
+  UI -->|HTTP GET `/api/.../health`| PROXY
+  PROXY --> IDX
+
+  IDX --> HZ --> H
+  IDX --> FC --> H
+  IDX --> SB --> R
+  IDX --> SB --> SKD
+  IDX --> DF --> BLEND --> R
+  IDX --> DF --> BC
+  IDX --> CORE
+```
+
+---
+
+## 3. Safety and Signing Model
+
+OrbitWay follows a non-custodial signing model. Account scans are read-only and do not require wallet approval. Cleanup actions require explicit user review and wallet-side signing.
+
+The default signing path uses Stellar Wallets Kit. Users connect a supported wallet, review the prepared action, sign the transaction client-side, and then OrbitWay refreshes account state after execution. The API does not receive user secret keys and does not sign user transactions.
+
+The current transaction boundary is intentionally narrow:
+
+| Signing path | Purpose | Status |
+|---|---|---|
+| `@creit.tech/stellar-wallets-kit` | Wallet connection and client-side signing through supported Stellar wallets | Integrated |
+| Multisig transaction assembly | Prepare transactions that collect multiple signatures before submission | Planned |
+| Local-only signing mode | Optional signing path for advanced or legacy accounts | Planned |
+| Server-side signing | Backend custody or transaction signing | Not supported |
+
+Server-side credentials may be used only for third-party service access, such as configured Soroswap quote/build flows. They are not used to custody user funds or sign user transactions.
+
+For advanced or legacy accounts, OrbitWay may support a local-only signing mode. If implemented, this mode should remain clearly separated from the default wallet flow. Secret keys should not be sent to the backend, should not be stored on OrbitWay servers, and should only be used in the local browser session after explicit user review.
+
+For multisig accounts, future versions of OrbitWay should support transaction assembly and multi-signature collection. The flow should generate the cleanup transaction XDR, show threshold and signer requirements, collect enough signatures, submit only when the threshold is met, and refresh account state before continuing.
+
+The safety rule is simple: if OrbitWay cannot safely inspect, remove, unwind, or verify an account-state object, the object remains visible as a blocker and account merge stays disabled.
+
+---
+
+## 4. Current Implementation Scope
+
+The current repository is implemented as a TypeScript monorepo using npm workspaces.
 
 | Workspace | Path | Role |
 |---|---|---|
-| `@stellar/web` | `apps/web` | Browser SPA for scanning accounts, showing blockers, connecting wallets, and signing supported cleanup transactions |
-| `@stellar/api` | `services/api` | Read-oriented backend-for-frontend that talks to Horizon, Soroban RPC, and selected protocol SDKs |
-| `@stellar/core` | `packages/core` | Shared types and pure health/blocker logic used by both web and API |
+| `@stellar/web` | `apps/web` | Browser SPA for account scanning, blocker display, wallet connection, and supported cleanup actions |
+| `@stellar/api` | `services/api` | Read-oriented backend-for-frontend for Horizon, Soroban RPC, and selected protocol reads |
+| `@stellar/core` | `packages/core` | Shared health-report types, blocker logic, and account-readiness helpers |
 
-### Languages and tooling
+The web app is built with React and Vite. It manages the account-health workflow, destination input, wallet connection, checklist rendering, blocker display, and supported classic cleanup actions. Wallet connection and signing are handled through Stellar Wallets Kit.
 
-| Area | Stack |
+The API is built with Fastify. It validates requests, reads account state from Horizon, reads selected Soroban state through RPC, checks selected protocol surfaces such as Blend exposure visibility, and composes this data into the shared health model. Soroswap is currently represented through helper routes for status and swap-XDR construction where server-side bearer configuration is available; broader position discovery and unwind support remain future extensions.
+
+The shared core package defines report types such as `HealthReport`, `Blocker`, and `SorobanScanResult`. It also contains pure health-analysis helpers such as `buildHealthReport`, which convert raw account state into checklist rows, blocker codes, open positions, summary information, and merge-readiness signals.
+
+Key source files include:
+
+| File | Purpose |
 |---|---|
-| Language | TypeScript across all workspaces |
-| Package manager | npm workspaces |
-| Node runtime | Node.js 20+ |
-| Dev runner | `tsx watch` for the API, Vite for the SPA |
-| Build tool | TypeScript compiler for `api` and `core`, Vite for `web` |
+| `apps/web/src/App.tsx` | Main app UI, health workflow, blocker display, and supported actions |
+| `apps/web/src/walletKit.ts` | Wallet-kit initialization and signing helpers |
+| `services/api/src/index.ts` | API routes and composition layer |
+| `services/api/src/sorobanScan.ts` | SAC balance and allowance checks |
+| `services/api/src/defiScan.ts` | Blend read path |
+| `packages/core/src/health.ts` | Canonical health checklist and blocker generation |
 
-### Frontend
+---
 
-| Package | Use |
+## 5. Network Read Surfaces
+
+OrbitWay reads account state from multiple Stellar network surfaces and normalizes those results into a single health report.
+
+Horizon is used for classic Stellar state, including account JSON, native and non-native balances, trustlines, SDEX offers, claimable balances, classic liquidity-pool balances, and destination-account existence checks. These reads allow OrbitWay to detect common blockers that affect cleanup and account merge readiness.
+
+Soroban RPC is used for Soroban-facing checks such as Stellar Asset Contract balances, configured SAC allowance checks, and protocol-backed reads where supported. Selected protocol integrations, such as Blend exposure visibility, use SDK or RPC-backed reads to surface relevant account state.
+
+---
+
+## 6. Health Check Data Flow
+
+The primary health-check flow begins when the web app sends a request to the API for a specific account and network. In local development, Vite proxies `/api` requests to the Fastify server. In production, the same flow can be served through a configured API base URL or same-origin deployment.
+
+The API validates the account address and selected network, fetches classic account state from Horizon, runs Soroban and supported protocol checks where available, and passes the combined state into the shared health engine. The result is returned to the web app as a normalized `HealthReport`.
+
+```mermaid
+sequenceDiagram
+  autonumber
+  actor User
+  participant Web as OrbitWay Web App
+  participant API as Fastify API
+  participant Horizon as Horizon
+  participant RPC as Soroban RPC
+  participant Protocols as Protocol Checks
+  participant Core as @stellar/core
+
+  User->>Web: Enter source account and network
+  User->>Web: Run health check
+  Web->>API: GET /api/account/{accountId}/health
+
+  API->>API: Validate request and account address
+
+  par Classic account reads
+    API->>Horizon: Fetch account state
+    API->>Horizon: Check balances, trustlines, offers, claimable balances
+  and Soroban / protocol reads
+    API->>RPC: Check SAC balances and allowances
+    API->>Protocols: Check supported protocol exposures
+  end
+
+  API->>Core: Build normalized health report
+  Core-->>API: HealthReport
+  API-->>Web: Checklist, blockers, summary, readiness
+  Web-->>User: Show cleanup plan and next actions
+```
+
+OrbitWay also exposes supporting API routes for focused read paths and helper flows:
+
+| Route | Purpose |
 |---|---|
-| `react` / `react-dom` | SPA rendering |
-| `vite` | Dev server and web build |
-| `@vitejs/plugin-react` | React integration for Vite |
-| `@creit.tech/stellar-wallets-kit` | Wallet connection and transaction signing |
-| `@stellar/stellar-sdk` | Classic Stellar transaction building and selected RPC helpers |
+| `GET /api/account/:accountId/horizon` | Returns the raw Horizon account payload for debugging or advanced flows |
+| `GET /api/account/:accountId/offers` | Returns full classic SDEX offers for offer-cancel flows |
+| `GET /api/account/:accountId/claimable-balances` | Returns inbound claimable balance IDs for claimable-balance handling |
+| `GET /api/order-book` | Looks up classic credit-to-native order books |
+| `GET /api/soroswap/status` | Checks whether the Soroswap helper is configured |
+| `POST /api/soroswap/swap-xdr` | Builds Soroswap swap XDR through server-side bearer configuration |
 
-### Backend
+---
 
-| Package | Use |
-|---|---|
-| `fastify` | HTTP API server |
-| `@fastify/cors` | CORS support for the API |
-| `@stellar/stellar-sdk` | Horizon and Soroban RPC access, asset and transaction helpers |
-| `@blend-capital/blend-sdk` | Blend protocol read path for DeFi exposure checks |
+## 7. Account Health and Blocker Model
 
-### Shared domain layer
+OrbitWay’s core output is a normalized health report. This report converts raw account state into a clear account-readiness model.
 
-`@stellar/core` exports:
+The report combines account-level readiness with object-level cleanup status. At the account level, OrbitWay can show whether the account is blocked, cleanup-ready, unsupported, or merge-ready. At the object level, each detected state item can be marked as directly cleanable, review-required, dependent on another action, or unsupported.
 
-- report types such as `HealthReport`, `Blocker`, `SorobanScanResult`
-- pure health analysis helpers such as `buildHealthReport`
-- position helpers such as liquidity-pool extraction and protocol-surface metadata
+A health report should include account summary data, checklist rows, blocker codes, object-level cleanup status, open positions, destination-readiness indicators, and merge-readiness signals. This makes the output usable by the web interface today and by future planner or execution-session flows.
 
-Key entrypoint: [packages/core/src/index.ts](../packages/core/src/index.ts)
+```mermaid
+stateDiagram-v2
+  [*] --> Scanned
+  Scanned --> Blocked: Blockers detected
+  Blocked --> ReviewRequired: User decision needed
+  ReviewRequired --> CleanupReady: Supported action available
+  CleanupReady --> Executing: User signs transaction
+  Executing --> Scanned: Refresh account state
+  Scanned --> MergeReady: No blockers remain
+  MergeReady --> Merged: User confirms final merge
+  Blocked --> Unsupported: Unsafe or unsupported state
+```
 
-## 3. Repository Structure
+OrbitWay currently focuses on these account-state categories:
+
+| Area | Handling | Cleanup support today |
+|---|---|---|
+| Sponsorship | Detects sponsorship-related state and prepares revoke operations where safe | Planned in controlled revoke batches |
+| Multisig | Inspects signer weights and thresholds; prepares merge-safe signer cleanup where authority permits | Remove extra `ed25519_public_key` signers and set merge-friendly thresholds where authority permits |
+| Trustlines | Removes zero-balance trustlines; requires sale, transfer, payout, or conversion for positive balances | Remove empty trustlines |
+| Account Data | Detects and removes account data entries through `ManageData` delete operations | Remove data entries |
+| Claimable Balances | Detects inbound claimable balances and includes claim actions where the account can claim them | Claim inbound claimable balances where the source account can claim them |
+| DEX Offers | Discovers open offers through Horizon and cancels them before trustline removal | Cancel SDEX offers |
+| LP Shares | Detects LP share balances and blocks merge unless they can be safely withdrawn or unwound | Withdraw LP shares where classic LP data is available |
+| Soroban / DeFi State | Detects supported state and blocks merge when unsupported or unverifiable state remains | Detection and merge blocking; unwind support remains limited or planned |
+| Account Merge | Enables merge only after blockers are resolved and the destination is validated | Plain `ACCOUNT_MERGE` for existing valid destination accounts |
+
+The health report identifies detected account-state objects and surfaces their cleanup status through blockers, checklist items, and readiness signals. Depending on the object type and current implementation support, OrbitWay may indicate that an action is available, that user review is required, that prerequisite steps must be completed first, or that the state is unsupported and prevents account merge.
+
+---
+
+## 8. Cleanup Planning and Execution
+
+OrbitWay converts detected account state into an ordered cleanup plan. The cleanup plan is sequential rather than one-shot because every cleanup transaction can change the account state and affect the next available action.
+
+For example, zero-balance trustlines can usually be removed directly, while positive-balance trustlines require sale, transfer, payout, or conversion before removal. Open offers must be cancelled before associated trustlines can be removed. Claimable balances may need to be claimed or reviewed. Sponsorship state may need to be revoked in batches. Multisig accounts may require signer and threshold changes before account merge is possible.
+
+When sponsorship cleanup spans many entries, OrbitWay should run it as a multi-pass flow: detect sponsored entries, build a safe revoke batch, show the batch for review, prepare XDR, collect signatures, submit, refresh state, and only continue if sponsored entries still remain. Likewise, claimable-balance handling should remain selective rather than assuming every detected balance should be claimed automatically.
+
+After each signed cleanup transaction, OrbitWay refreshes account state and rebuilds the health report. This prevents the app from relying on stale assumptions and allows the user to move through cleanup in controlled steps.
+
+Account merge is treated as the final action. Before merge, OrbitWay verifies that no blocking balances, trustlines, offers, claimable balances, account data entries, sponsorship state, signer configuration issues, unsupported Soroban state, or DeFi positions remain. It also verifies that the destination account is valid and that the user has explicitly reviewed the irreversible merge action.
+
+Destination validation includes checking whether the destination account exists and whether the selected destination can safely receive recovered funds. Direct `ACCOUNT_MERGE` should only be offered where the destination supports it; exchange or memo-based destinations require additional handling and remain part of the planned mediator-account flow.
+
+---
+
+## 9. Soroban and DeFi Boundary
+
+OrbitWay’s Soroban and DeFi support is intentionally conservative. The current priority is safe detection and merge blocking, not full portfolio liquidation or generalized DeFi unwinding.
+
+Where OrbitWay can safely detect Soroban balances, allowances, or protocol exposures, it should include them in the health report. Where it cannot safely inspect or unwind a position, it should mark the state as unsupported and prevent account merge. This approach avoids hiding complex state that could affect account cleanup.
+
+The current and planned protocol boundary is:
+
+| Area | Integration surface | Handling |
+|---|---|---|
+| SAC balances | Soroban RPC and token contract reads | Detect balances and include them in the health report |
+| Allowances and authorizations | Soroban RPC and configured contract checks | Show configured allowances today; broader discovery and revocation remain planned |
+| Blend | Soroban RPC, simulation paths, and `@blend-capital/blend-sdk` | Read-only exposure visibility today; close and withdraw adapters remain planned |
+| Aquarius | Contract reads and indexer support where available | Detection and unwind support remain planned |
+| Soroswap | HTTPS API and TypeScript SDK | Used for quotes, route metadata, and swap transaction construction where configured |
+| Classic SDEX / AMM | Horizon and liquidity-pool endpoints | Used for offer cancellation, LP detection, LP withdrawal, and route discovery where available |
+
+For supported protocols, the intended unwind pattern is adapter-based: detect the position, fetch metadata, show unwind requirements, simulate or preview where possible, generate XDR, require user review and signing, then refresh account state. Allowance handling should also support an inspect-only path so users can review active approvals without entering the cleanup or merge flow.
+
+Future extensions may include broader allowance discovery, allowance revocation, Soroban asset routing, Blend position close flows, Aquarius and Soroswap unwind support, and conversion into XLM or another user-selected destination asset. These are future extensions and should not be treated as required for the initial cleanup flow.
+
+---
+
+## 10. Current Limitations
+
+The current repository is not yet a complete cleanup planner and execution engine. The main limitations are full multisig signing across multiple keys or wallets, general Soroban teardown parity, DeFi unwind transaction builders for Blend, Aquarius, or Soroswap LP positions, a dry-run planner, a sequential execution session model, and automatic discovery of arbitrary Soroban-only assets or all active spender authorizations.
+
+The repository also does not yet include mediator-account merge support for exchange or CEX destinations that cannot directly receive `ACCOUNT_MERGE`. Until those flows are implemented, OrbitWay should continue to treat unsupported destination or account-state conditions conservatively.
+
+OrbitWay should not automatically attempt cleanup for assets, contracts, signers, destinations, or protocol positions that it cannot fully inspect and explain. In those cases, the health report should show the blocker and prevent merge rather than generating a transaction.
+
+---
+
+## 11. Roadmap and Planned Enhancements
+
+The current MVP focuses on account inspection, health reporting, blocker detection, and supported cleanup actions for common Stellar account states. Future development is centered on expanding cleanup coverage, improving execution workflows, and increasing visibility into complex account state while maintaining OrbitWay’s safety-first model.
+
+Near-term enhancements include dry-run planning, guided execution sessions, fuller multisig workflows, expanded sponsorship and account-configuration cleanup, and broader Soroban asset, allowance, and authorization discovery.
+
+Soroban parity is expected to arrive in stages: SAC balance scanning, configured allowance checks, broader allowance and authorization discovery, asset routing and conversion, DeFi position detection, protocol-specific unwind adapters, and finally merge-readiness checks that fully incorporate Soroban state.
+
+Future protocol extensions can add additional Soroban cleanup capabilities, DeFi unwind support for protocols such as Blend, Aquarius, and Soroswap, route-based asset conversion and recovery flows, and mediator-account support for destinations that cannot directly receive account merges.
+
+---
+
+## 12. Testing and Validation
+
+The shared health logic should remain testable through pure functions in `packages/core`. Tests should cover blocker generation, account-readiness decisions, unsupported-state handling, and the conversion of Horizon, Soroban, or protocol findings into a normalized health report.
+
+API-level validation should cover request validation, missing-account behavior, upstream response handling, supported network selection, and error handling for partial or unavailable network reads. Frontend validation should focus on wallet-state handling, transaction review, cleanup-step rendering, and refresh-after-execution behavior.
+
+---
+
+## 13. Repository Structure
+
+The repository uses npm workspaces and is organized around the three main product boundaries.
 
 ```text
 stellar/
@@ -84,523 +335,62 @@ stellar/
 └── package.json
 ```
 
-Important files:
+This structure keeps network reads, domain logic, and signing interactions separated. New network reads should live in `services/api`, blocker and readiness rules should live in `packages/core`, and signing or interactive execution should live in `apps/web`.
 
-- [apps/web/src/App.tsx](../apps/web/src/App.tsx): main app UI, health workflow, blocker actions
-- [apps/web/src/walletKit.ts](../apps/web/src/walletKit.ts): wallet-kit initialization and signing helpers
-- [services/api/src/index.ts](../services/api/src/index.ts): API routes and composition layer
-- [services/api/src/sorobanScan.ts](../services/api/src/sorobanScan.ts): SAC balance and allowance checks
-- [services/api/src/defiScan.ts](../services/api/src/defiScan.ts): Blend backstop read path
-- [packages/core/src/health.ts](../packages/core/src/health.ts): canonical health checklist and blocker generation
+---
 
-## 4. Local Setup
+## 14. Developer Setup
 
-### Requirements
-
-- Node.js `20+`
-- npm `10+`
-
-### Install
+OrbitWay requires Node.js 20+ and npm 10+.
 
 ```bash
 cd <WORK_DIRECTORY>
 npm install
 ```
 
-### Run locally
-
-Start both the API and SPA:
+To run both the API and web app locally:
 
 ```bash
 npm run dev:all
 ```
 
-Useful alternatives:
+Useful development commands:
 
 ```bash
-npm run dev       # web only, port 5173
-npm run dev:api   # api only, port 8787
+npm run dev        # web only, port 5173
+npm run dev:api    # api only, port 8787
 npm run build
 npm run typecheck
 ```
 
-### Default local ports
+During local development, the SPA proxies `/api` requests to the local API through `apps/web/vite.config.ts`.
 
-| Service | Port | Notes |
-|---|---|---|
-| SPA (`@stellar/web`) | `5173` | Vite dev server |
-| API (`@stellar/api`) | `8787` | Fastify server |
+The web app runs on port `5173`, and the API runs on port `8787`.
 
-The SPA proxies `/api` requests to the local API through [apps/web/vite.config.ts](../apps/web/vite.config.ts).
+---
 
-## 5. Environment Configuration
+## 15. Environment Configuration
 
-### API environment
-
-Environment variables documented in [services/api/README.md](../services/api/README.md):
+The API supports environment variables for network configuration, Soroban reads, protocol integrations, and logging.
 
 | Variable | Purpose |
 |---|---|
-| `HORIZON_URL` | Override Horizon base URL for all requests |
-| `SOROBAN_RPC_URL` | Override Soroban RPC base URL for all requests |
+| `HORIZON_URL` | Override Horizon base URL |
+| `SOROBAN_RPC_URL` | Override Soroban RPC base URL |
 | `SOROBAN_ALLOWANCE_SPENDERS` | Comma-separated Soroban spender contract IDs used for allowance checks |
 | `SOROSWAP_BEARER_TOKEN` | Enables server-side Soroswap quote/build flow |
 | `SOROSWAP_API_BASE` | Override Soroswap API host |
-| `HOST` / `PORT` | API bind address and port |
-| `LOG_UPSTREAM` / `LOG_UPSTREAM_BODY` | Upstream request/response logging controls |
+| `HOST / PORT` | API bind address and port |
+| `LOG_UPSTREAM / LOG_UPSTREAM_BODY` | Upstream request/response logging controls |
 
-### Web environment
-
-Current web-specific environment use:
+The web app currently uses:
 
 | Variable | Purpose |
 |---|---|
-| `VITE_WALLETCONNECT_PROJECT_ID` | Enables WalletConnect module in Stellar Wallets Kit |
+| `VITE_WALLETCONNECT_PROJECT_ID` | Enables WalletConnect support in Stellar Wallets Kit |
 
-## 6. Architecture
+---
 
-The high-level component diagram:
+## 16. Development Notes
 
-![Screenshot](./system.png)
-
-```mermaid
-flowchart TB
-  subgraph User["User / browser"]
-    U[Operator]
-  end
-
-  subgraph DevHost["Developer machine"]
-    subgraph Web["@stellar/web — Vite SPA :5173"]
-      UI[App.tsx — checklist, destination, Orbitway workspace]
-      WK[Stellar Wallets Kit — connect / profile / sign hook]
-      CoreC["@stellar/core — types, isValidClassicAddress"]
-    end
-    subgraph API["@stellar/api — Fastify :8787"]
-      IDX[index.ts — routes + CORS]
-      HZ[horizon.ts — account, offers flags]
-      FC[fetchClassicPositions.ts — SDEX offers]
-      SB[sorobanScan.ts — SAC balances, allowances]
-      DF[defiScan.ts — Blend SDK → RPC]
-      CORE[buildHealthReport — @stellar/core]
-    end
-    PROXY[Vite proxy `/api` → 8787]
-  end
-
-  subgraph Ext["External Stellar network"]
-    H[(Horizon — classic REST)]
-    R[(Soroban RPC — getLedgerEntries / reads)]
-    BC[(Blend contracts on ledger — via RPC)]
-  end
-
-  subgraph Deps["NPM libraries (in-process)"]
-    SKD["@stellar/stellar-sdk"]
-    BLEND["@blend-capital/blend-sdk"]
-  end
-
-  subgraph Planned["Documented / README — not fully wired"]
-    PL[Planner / preview / automated tx execution]
-    POS["Handbook position API — not in repo"]
-  end
-
-  U --> UI
-  UI --> WK
-  UI --> CoreC
-  UI -->|HTTP GET `/api/.../health`| PROXY
-  PROXY --> IDX
-
-  IDX --> HZ --> H
-  IDX --> FC --> H
-  IDX --> SB --> R
-  IDX --> SB --> SKD
-  IDX --> DF --> BLEND --> R
-  IDX --> DF --> BC
-  IDX --> CORE
-
-  UI -.->|future| PL
-  IDX -.->|RFP / docs| POS
-```
-
-### Request Sequence Diagram
-
-```mermaid
-sequenceDiagram
-  autonumber
-  actor User as User
-  participant Browser as Browser (SPA)
-  participant Vite as Vite dev server :5173
-  participant API as Fastify API :8787
-  participant Core as @stellar/core
-  participant Horizon as Horizon (classic)
-  participant RPC as Soroban RPC
-  participant Blend as Blend on-ledger (via SDK/RPC)
-
-  User->>Browser: Open app, choose Testnet/Mainnet
-  User->>Browser: Enter source G-address (and optional destination)
-  User->>Browser: Click "Run health check"
-
-  Browser->>Vite: GET /api/account/{G}/health?network=...
-  Note over Vite,API: Dev: Vite proxies `/api` → 8787. Production: serve SPA + call API same-origin or configured base URL.
-  Vite->>API: Forward request
-
-  API->>API: Validate classic address
-  par Classic presence + offer hint
-    API->>Horizon: Fetch account (404 → not found report)
-    API->>Horizon: Check open offers (count / existence)
-  end
-
-  alt Account missing on Horizon
-    API->>Core: buildHealthReport (no account, minimal Soroban stub)
-    Core-->>API: HealthReport JSON
-    API-->>Browser: 200 + report
-    Browser-->>User: Checklist: account not found / wrong network
-  else Account exists
-    par Soroban SAC scan and DeFi scan
-      API->>RPC: Read SAC / contract state (sorobanScan)
-      API->>Blend: Backstop / pool user reads (defiScan + Blend SDK → RPC)
-    end
-    API->>Core: buildHealthReport(account, offersCount, soroban, openPositions.defiProtocols)
-    Core-->>API: HealthReport (checklist, blockers, openPositions, summary)
-    API-->>Browser: 200 + JSON
-    Browser-->>User: Show checklist, Horizon/Soroban URLs, blockers, canDemolish
-  end
-
-  User->>Browser: Optionally enter destination, read "Demolish" copy
-```
-
-### Web layer
-
-`@stellar/web` is a client-rendered SPA that:
-
-- captures user input such as source account, network, and destination account
-- calls API health endpoints
-- renders grouped checklist rows and blockers from `HealthReport`
-- builds or requests XDRs for supported classic cleanup flows
-- uses Stellar Wallets Kit for client-side signing
-
-The web app does not hold server secrets and does not proxy signing through the API.
-
-### API layer
-
-`@stellar/api` is a thin composition layer. It does not custody user keys. It is responsible for:
-
-- validating request shape
-- reading classic account state from Horizon
-- reading Soroban state from RPC
-- reading selected DeFi protocol state, currently Blend
-- composing those slices into a normalized `HealthReport`
-
-The API is not a generic planner or execution engine. It is currently a read-oriented BFF plus a small number of helper routes such as order-book lookup and Soroswap quote/build.
-
-### Shared domain layer
-
-`@stellar/core` defines the canonical health model. This is where the codebase decides:
-
-- which checklist rows exist
-- which conditions block account demolition
-- how open positions are represented
-- how classic, Soroban, and DeFi findings collapse into blocker codes
-
-This separation keeps business logic testable and avoids duplicating rules between API and UI.
-
-## 7. External Dependencies and Network Boundaries
-
-### Horizon
-
-Horizon is used for classic Stellar reads:
-
-- account JSON
-- trustline and balance inspection
-- SDEX offers
-- claimable balances
-- classic liquidity-pool balances
-- destination-account existence checks
-
-Default endpoints are network-specific unless `HORIZON_URL` is set.
-
-### Soroban RPC
-
-Soroban RPC is used for:
-
-- Stellar Asset Contract balance checks
-- SAC allowance checks against configured spender contracts
-- protocol-backed reads such as Blend through SDK + RPC
-
-Default endpoints are network-specific unless `SOROBAN_RPC_URL` is set.
-
-### Protocol integrations
-
-Current protocol-specific integration:
-
-- Blend via `@blend-capital/blend-sdk` for reward-zone/backstop exposure checks
-
-Current non-integrated-but-documented surfaces:
-
-- Aquarius
-- Soroswap positions and unwind flows beyond the existing quote/build helper
-
-## 8. Request and Data Flow
-
-### Primary health-check flow
-
-At a high level:
-
-1. The SPA sends `GET /api/account/:accountId/health?network=...`.
-2. The API fetches Horizon account state and classic positions.
-3. In parallel, the API runs Soroban SAC checks and DeFi surface checks.
-4. The API calls `buildHealthReport` from `@stellar/core`.
-5. The SPA renders `checklist`, `blockers`, `summary`, and `openPositions`.
-
-See the [request sequence diagram](#request-sequence-diagram).
-
-### Supporting routes
-
-Additional API routes serve focused read paths or helper flows:
-
-| Route | Purpose |
-|---|---|
-| `GET /api/account/:accountId/horizon` | Raw Horizon account payload for debugging/advanced flows |
-| `GET /api/account/:accountId/offers` | Full classic SDEX offers for cancel flows |
-| `GET /api/account/:accountId/claimable-balances` | Inbound claimable balance IDs |
-| `GET /api/order-book` | Classic credit-to-native order book lookup |
-| `GET /api/soroswap/status` | Whether Soroswap helper is configured |
-| `POST /api/soroswap/swap-xdr` | Build Soroswap swap XDR through server-side bearer auth |
-
-## 9. Stellar Account State Coverage
-
-Orbitway identifies account-state objects that may block cleanup, asset recovery, or account merge.
-
-| Area | Current / Planned Handling |
-|---|---|
-| Sponsorship | Detects sponsorship-related state such as `num_sponsoring` and sponsored entries. Where safe, Orbitway builds `RevokeSponsorship` operations in batches. Large accounts are handled through multi-pass processing: execute batch, refresh state, recalculate remaining sponsored entries, and continue only after user review. |
-| Multisig | Inspects signer weights, threshold configuration, and threshold mismatches. If authority permits, Orbitway prepares `SetOptions` operations to remove extra signers by setting signer weight to `0` and adjusts thresholds into a merge-safe configuration. |
-| Trustlines | Removes zero-balance classic trustlines. Positive-balance trustlines are handled through sale, transfer, payout, or conversion before `ChangeTrust(0)`. |
-| Account Data | Detects account data entries and removes them through `ManageData` delete operations, including batch handling for large accounts. |
-| Claimable Balances | Detects inbound claimable balances and includes claim actions where the account can claim them. Users should be able to select balances instead of claiming all by default. |
-| DEX Offers | Discovers open offers through Horizon. Offers are cancelled before trustline removal because active offers can block cleanup. |
-| LP Shares | Detects classic AMM / LP share balances through Horizon. LP shares are treated as blockers unless they can be safely withdrawn or unwound. |
-| Account Merge Readiness | Derives readiness from balances, trustlines, offers, sponsorships, signers, thresholds, unsupported positions, destination validity, and user approval of final irreversible action. |
-
-Cleanup planning classifies each detected account-state object as one of four categories:
-
-- ready to clean
-- needs user review
-- requires another action first
-- unsupported or unsafe to close
-
-Unsupported or unverifiable state blocks account merge.
-
-## 10. Cleanup Execution Details
-
-Orbitway converts account state into an ordered cleanup plan. The goal is not just to detect blockers, but to explain what happens next and prepare the correct action sequence.
-
-### Sponsorship removal
-
-For sponsored entries that can be discovered through Horizon, Orbitway prepares `RevokeSponsorship` operations. For accounts with many sponsored entries, cleanup is split into multiple passes.
-
-Each pass follows this flow:
-
-1. Detect sponsored entries.
-2. Build a safe revoke batch.
-3. Show the user what will be revoked.
-4. Prepare transaction XDR.
-5. User signs.
-6. Submit transaction.
-7. Refresh account state.
-8. Continue only if more sponsored entries remain.
-
-If a sponsored entry cannot be safely identified or revoked, it remains a blocker.
-
-### Multisig and threshold cleanup
-
-Orbitway scans current signer configuration, signer weights, and account thresholds.
-
-If the connected signer has enough authority, Orbitway can prepare `SetOptions` operations to:
-
-- remove extra signers by setting their weight to `0`
-- adjust low, medium, and high thresholds where required
-- move the account toward a merge-safe configuration
-- refresh state after each signer or threshold update
-
-For multisig accounts, Orbitway will support transaction assembly so multiple required signers can sign before submission. This prevents incomplete signer cleanup from leaving the account in an unsafe state.
-
-### Trustline and balance cleanup
-
-Trustline cleanup is handled in two paths:
-
-- zero-balance trustlines: removed directly through `ChangeTrust(0)`
-- positive-balance trustlines: routed through sale, transfer, payout, or conversion before trustline removal
-
-If a token cannot be sold, transferred, or routed safely, it remains a blocker and account merge is disabled.
-
-### Account merge and destination handling
-
-Account merge is treated as the final step, not a generic cleanup action.
-
-Before merge, Orbitway verifies:
-
-- no blocking non-native balances remain
-- no required trustlines remain
-- no open offers remain
-- no required claimable balances remain unresolved
-- no required data entries remain
-- signers and thresholds allow account merge
-- sponsorship state does not block cleanup
-- no unsupported Soroban or DeFi positions remain
-- destination account is valid
-- user has reviewed the irreversible merge action
-
-Users can choose a Stellar wallet or exchange destination. For exchange destinations, Orbitway will support memo / tag handling where required.
-
-If the final destination cannot receive `ACCOUNT_MERGE`, Orbitway will support a temporary mediator-account flow: the original account merges into a temporary account, and recovered funds are then sent to the final destination through a standard payment operation.
-
-## 11. Soroban, DeFi, and Routing Support
-
-Orbitway's Soroban and DeFi support is built in stages. The system should never allow account merge when unsupported Soroban or DeFi state cannot be safely verified.
-
-| Area | Integration Surface | Current / Planned Handling |
-|---|---|---|
-| SAC balances | Soroban RPC and token contract reads | Detect SAC token balances and include them in account health reports. |
-| Allowances and authorizations | Soroban RPC and configured contract checks | Show configured allowances today. Expand toward automatic discovery of active allowances and revocation support. |
-| Blend | Soroban RPC, simulations, and `@blend-capital/blend-sdk` | Current implementation provides read-only Blend backstop exposure visibility. Planned adapters will support position close / withdraw flows where reliable. |
-| Aquarius | Soroban contract calls, pool/router reads, and indexer support where available | Position discovery may require contract-level reads. Planned adapters will support unwind flows where technically feasible. |
-| Soroswap | HTTPS API and TypeScript SDK | Used for quotes, pool metadata, routing, and transaction building through the API service. |
-| Classic SDEX / AMM | Horizon and liquidity pool endpoints | Used for offer cancellation, classic LP detection, LP withdrawal, and route discovery where available. |
-
-### DeFi unwind adapter flow
-
-For each supported protocol, Orbitway will implement an adapter pattern:
-
-1. Detect whether the account has an active position.
-2. Fetch position metadata through RPC, SDK, protocol API, or indexer.
-3. Show position details and unwind requirements.
-4. Simulate or preview the close / withdraw action where supported.
-5. Generate transaction XDR.
-6. Require user review and wallet-side signing.
-7. Refresh account state after execution.
-
-Initial DeFi unwind targets include Blend, Aquarius, Soroswap, and other major Stellar / Soroban protocols where position detection and safe closure can be supported reliably.
-
-### Portfolio liquidation and target-asset conversion
-
-Orbitway will support portfolio liquidation into XLM by default and later into user-selected target assets where routes are available. The routing layer will evaluate available sources such as:
-
-- Classic SDEX order books
-- Soroswap routes
-- Soroban-supported liquidity routes
-- other available protocol routes where reliable
-
-For each route, Orbitway will show:
-
-- source asset
-- target asset
-- estimated output
-- slippage
-- route path
-- unsupported assets
-- whether the conversion is required for account merge
-
-For Soroban SAC assets, Orbitway will discover balances, check available routes, show estimated output, and prepare swap transactions only after user confirmation. If no safe route exists, the asset is marked as unsupported and account merge remains blocked.
-
-### Allowance inspection without demolishing
-
-Orbitway will include an inspect-only mode for Soroban allowances and authorizations.
-
-Users can scan active allowances without starting the cleanup or account merge flow. This mode will show known spender approvals, token contracts, allowance amounts, expiry where available, and whether revocation is supported.
-
-Allowance revocation can then be offered as a separate cleanup action.
-
-### Soroban parity path
-
-Orbitway will move toward Soroban parity in stages:
-
-1. SAC balance scanning
-2. Configured allowance checks
-3. Broader allowance and authorization discovery
-4. Soroban asset routing and conversion
-5. DeFi position detection
-6. Protocol-specific unwind adapters
-7. Merge-readiness checks that include Soroban state
-
-Until parity is reached, unsupported Soroban state will remain visible as a blocker rather than being hidden.
-
-## 12. Wallet Signing, Multisig, and Transaction Model
-
-Orbitway follows a non-custodial signing model. Account scans are read-only and do not require wallet approval. Cleanup actions require explicit user review and wallet-side signing.
-
-Orbitway's default signing path is wallet-based through Stellar Wallets Kit.
-
-| Integration | Purpose | Status |
-|---|---|---|
-| `@creit.tech/stellar-wallets-kit` | Wallet connection and client-side signing through Freighter, WalletConnect, and other Stellar wallets. | Integrated |
-| Multisig transaction assembly | Prepare transactions that can collect multiple signatures before submission. | Planned |
-| Local signing mode | Optional local-only signing for advanced or legacy accounts. | Planned |
-| Server-side signing | Not used. Private keys are never sent to the backend. | Not supported |
-
-Current write flow is intentionally non-custodial:
-
-- XDRs are constructed in the client for supported classic operations
-- user signatures are gathered through Stellar Wallets Kit
-- the API does not receive user secret keys
-- the API may use server-side credentials only for third-party service access such as Soroswap quote/build
-
-Implemented classic write helpers include:
-
-- remove data entries
-- cancel SDEX offers
-- withdraw LP shares
-- claim inbound claimable balances
-- remove empty trustlines
-- remove extra `ed25519_public_key` signers
-- set merge-friendly thresholds
-- perform plain `ACCOUNT_MERGE` to an existing destination account
-
-### Direct secret key input
-
-For advanced or legacy accounts, Orbitway may support direct secret key input as an optional local-only signing mode. If implemented:
-
-- secret keys are never sent to the backend
-- secret keys are not stored on Orbitway servers
-- keys are not persisted by default
-- the key is used only in the local browser session
-- the user still reviews each transaction before signing
-
-This mode will be clearly separated from the default wallet-based flow and marked as advanced.
-
-### Multisig with multiple keys
-
-For multisig accounts, Orbitway will support transaction assembly and multi-signature collection. The flow will be:
-
-1. Generate cleanup transaction XDR.
-2. Show required threshold and signer requirements.
-3. Collect signatures from connected wallets or local signers.
-4. Validate that the signature threshold is met.
-5. Submit the transaction only after enough signatures are present.
-6. Refresh account state before the next cleanup step.
-
-This allows Orbitway to support multisig and legacy accounts without taking custody of user funds.
-
-## 13. Current Limitations
-
-The repo is not yet a full demolition planner/executor. The main technical gaps are:
-
-- no mediator-account merge flow for exchanges/CEX destinations
-- no full multisig signing workflow across multiple keys or wallets
-- no general Soroban teardown parity
-- no DeFi unwind transaction builders for Blend, Aquarius, or Soroswap LP positions
-- no dry-run planner or sequential execution session model
-- no automatic discovery of arbitrary Soroban-only assets or all active spender authorizations
-
-These limits are described in more detail in:
-
-- [README.md](../README.md)
-- [ORBITWAY_USECASES_AND_COMPONENTS.md](./ORBITWAY_USECASES_AND_COMPONENTS.md)
-
-## 14. Development Notes
-
-When extending the codebase, keep these boundaries intact:
-
-- add network reads to `services/api`
-- keep report and blocker decisions in `packages/core`
-- keep signing and interactive execution in `apps/web`
-
-That separation matches the current implementation and the diagrams in [ARCHITECTURE_DIAGRAMS.md](./ARCHITECTURE_DIAGRAMS.md), and it is the cleanest path for future additions such as a planner, preview engine, or deeper Soroban protocol adapters.
+Future development should preserve OrbitWay’s current separation of concerns: network reads belong in `services/api`, account-readiness rules belong in `packages/core`, and signing or interactive execution belongs in `apps/web`. This keeps the system easier to test, safer to extend, and aligned with the non-custodial transaction model.
