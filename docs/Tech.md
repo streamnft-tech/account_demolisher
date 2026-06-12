@@ -55,7 +55,7 @@ flowchart TB
       WK[Stellar Wallets Kit — connect / profile / sign hook]
       CoreC["@stellar/core — types, isValidClassicAddress"]
     end
-    subgraph API["@stellar/api — Fastify :8787"]
+    subgraph API["@stellar/api — Fastify"]
       IDX[index.ts — routes + CORS]
       HZ[horizon.ts — account, offers flags]
       FC[fetchClassicPositions.ts — SDEX offers]
@@ -63,7 +63,7 @@ flowchart TB
       DF[defiScan.ts — Blend SDK → RPC]
       CORE[buildHealthReport — @stellar/core]
     end
-    PROXY[Vite proxy `/api` → 8787]
+    PROXY[Vite proxy `/api`]
   end
 
   subgraph Ext["External Stellar network"]
