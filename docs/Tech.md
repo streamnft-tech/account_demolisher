@@ -231,17 +231,17 @@ stateDiagram-v2
 
 OrbitWay currently focuses on these account-state categories:
 
-| Area | Handling |
-|---|---|
-| Sponsorship | Detects sponsorship-related state and prepares revoke operations where safe |
-| Multisig | Inspects signer weights and thresholds; prepares merge-safe signer cleanup where authority permits |
-| Trustlines | Removes zero-balance trustlines; requires sale, transfer, payout, or conversion for positive balances |
-| Account Data | Detects and removes account data entries through `ManageData` delete operations |
-| Claimable Balances | Detects inbound claimable balances and includes claim actions where the account can claim them |
-| DEX Offers | Discovers open offers through Horizon and cancels them before trustline removal |
-| LP Shares | Detects LP share balances and blocks merge unless they can be safely withdrawn or unwound |
-| Soroban / DeFi State | Detects supported state and blocks merge when unsupported or unverifiable state remains |
-| Account Merge | Enables merge only after blockers are resolved and the destination is validated |
+| Area | Handling | Cleanup support today |
+|---|---|---|
+| Sponsorship | Detects sponsorship-related state and prepares revoke operations where safe | Planned in controlled revoke batches |
+| Multisig | Inspects signer weights and thresholds; prepares merge-safe signer cleanup where authority permits | Remove extra `ed25519_public_key` signers and set merge-friendly thresholds where authority permits |
+| Trustlines | Removes zero-balance trustlines; requires sale, transfer, payout, or conversion for positive balances | Remove empty trustlines |
+| Account Data | Detects and removes account data entries through `ManageData` delete operations | Remove data entries |
+| Claimable Balances | Detects inbound claimable balances and includes claim actions where the account can claim them | Claim inbound claimable balances where the source account can claim them |
+| DEX Offers | Discovers open offers through Horizon and cancels them before trustline removal | Cancel SDEX offers |
+| LP Shares | Detects LP share balances and blocks merge unless they can be safely withdrawn or unwound | Withdraw LP shares where classic LP data is available |
+| Soroban / DeFi State | Detects supported state and blocks merge when unsupported or unverifiable state remains | Detection and merge blocking; unwind support remains limited or planned |
+| Account Merge | Enables merge only after blockers are resolved and the destination is validated | Plain `ACCOUNT_MERGE` for existing valid destination accounts |
 
 The health report identifies detected account-state objects and surfaces their cleanup status through blockers, checklist items, and readiness signals. Depending on the object type and current implementation support, OrbitWay may indicate that an action is available, that user review is required, that prerequisite steps must be completed first, or that the state is unsupported and prevents account merge.
 
@@ -260,19 +260,6 @@ After each signed cleanup transaction, OrbitWay refreshes account state and rebu
 Account merge is treated as the final action. Before merge, OrbitWay verifies that no blocking balances, trustlines, offers, claimable balances, account data entries, sponsorship state, signer configuration issues, unsupported Soroban state, or DeFi positions remain. It also verifies that the destination account is valid and that the user has explicitly reviewed the irreversible merge action.
 
 Destination validation includes checking whether the destination account exists and whether the selected destination can safely receive recovered funds. Direct `ACCOUNT_MERGE` should only be offered where the destination supports it; exchange or memo-based destinations require additional handling and remain part of the planned mediator-account flow.
-
-The current implementation includes the following classic cleanup helpers:
-
-| Cleanup helper | Status |
-|---|---|
-| Remove data entries | Supported |
-| Cancel SDEX offers | Supported |
-| Claim inbound claimable balances | Supported where the source account can claim them |
-| Remove empty trustlines | Supported |
-| Withdraw LP shares | Supported where classic LP data is available |
-| Remove extra `ed25519_public_key` signers | Supported where authority permits |
-| Set merge-friendly thresholds | Supported where authority permits |
-| Plain `ACCOUNT_MERGE` | Supported for existing valid destination accounts |
 
 ---
 
