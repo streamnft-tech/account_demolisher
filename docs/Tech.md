@@ -100,6 +100,15 @@ OrbitWay follows a non-custodial signing model. Account scans are read-only and 
 
 The default signing path uses Stellar Wallets Kit. Users connect a supported wallet, review the prepared action, sign the transaction client-side, and then OrbitWay refreshes account state after execution. The API does not receive user secret keys and does not sign user transactions.
 
+The current transaction boundary is intentionally narrow:
+
+| Signing path | Purpose | Status |
+|---|---|---|
+| `@creit.tech/stellar-wallets-kit` | Wallet connection and client-side signing through supported Stellar wallets | Integrated |
+| Multisig transaction assembly | Prepare transactions that collect multiple signatures before submission | Planned |
+| Local-only signing mode | Optional signing path for advanced or legacy accounts | Planned |
+| Server-side signing | Backend custody or transaction signing | Not supported |
+
 Server-side credentials may be used only for third-party service access, such as configured Soroswap quote/build flows. They are not used to custody user funds or sign user transactions.
 
 For advanced or legacy accounts, OrbitWay may support a local-only signing mode. If implemented, this mode should remain clearly separated from the default wallet flow. Secret keys should not be sent to the backend, should not be stored on OrbitWay servers, and should only be used in the local browser session after explicit user review.
@@ -244,6 +253,8 @@ OrbitWay converts detected account state into an ordered cleanup plan. The clean
 
 For example, zero-balance trustlines can usually be removed directly, while positive-balance trustlines require sale, transfer, payout, or conversion before removal. Open offers must be cancelled before associated trustlines can be removed. Claimable balances may need to be claimed or reviewed. Sponsorship state may need to be revoked in batches. Multisig accounts may require signer and threshold changes before account merge is possible.
 
+When sponsorship cleanup spans many entries, OrbitWay should run it as a multi-pass flow: detect sponsored entries, build a safe revoke batch, show the batch for review, prepare XDR, collect signatures, submit, refresh state, and only continue if sponsored entries still remain. Likewise, claimable-balance handling should remain selective rather than assuming every detected balance should be claimed automatically.
+
 After each signed cleanup transaction, OrbitWay refreshes account state and rebuilds the health report. This prevents the app from relying on stale assumptions and allows the user to move through cleanup in controlled steps.
 
 Account merge is treated as the final action. Before merge, OrbitWay verifies that no blocking balances, trustlines, offers, claimable balances, account data entries, sponsorship state, signer configuration issues, unsupported Soroban state, or DeFi positions remain. It also verifies that the destination account is valid and that the user has explicitly reviewed the irreversible merge action.
@@ -271,6 +282,19 @@ OrbitWay’s Soroban and DeFi support is intentionally conservative. The current
 
 Where OrbitWay can safely detect Soroban balances, allowances, or protocol exposures, it should include them in the health report. Where it cannot safely inspect or unwind a position, it should mark the state as unsupported and prevent account merge. This approach avoids hiding complex state that could affect account cleanup.
 
+The current and planned protocol boundary is:
+
+| Area | Integration surface | Handling |
+|---|---|---|
+| SAC balances | Soroban RPC and token contract reads | Detect balances and include them in the health report |
+| Allowances and authorizations | Soroban RPC and configured contract checks | Show configured allowances today; broader discovery and revocation remain planned |
+| Blend | Soroban RPC, simulation paths, and `@blend-capital/blend-sdk` | Read-only exposure visibility today; close and withdraw adapters remain planned |
+| Aquarius | Contract reads and indexer support where available | Detection and unwind support remain planned |
+| Soroswap | HTTPS API and TypeScript SDK | Used for quotes, route metadata, and swap transaction construction where configured |
+| Classic SDEX / AMM | Horizon and liquidity-pool endpoints | Used for offer cancellation, LP detection, LP withdrawal, and route discovery where available |
+
+For supported protocols, the intended unwind pattern is adapter-based: detect the position, fetch metadata, show unwind requirements, simulate or preview where possible, generate XDR, require user review and signing, then refresh account state. Allowance handling should also support an inspect-only path so users can review active approvals without entering the cleanup or merge flow.
+
 Future extensions may include broader allowance discovery, allowance revocation, Soroban asset routing, Blend position close flows, Aquarius and Soroswap unwind support, and conversion into XLM or another user-selected destination asset. These are future extensions and should not be treated as required for the initial cleanup flow.
 
 ---
@@ -290,6 +314,8 @@ OrbitWay should not automatically attempt cleanup for assets, contracts, signers
 The current MVP focuses on account inspection, health reporting, blocker detection, and supported cleanup actions for common Stellar account states. Future development is centered on expanding cleanup coverage, improving execution workflows, and increasing visibility into complex account state while maintaining OrbitWay’s safety-first model.
 
 Near-term enhancements include dry-run planning, guided execution sessions, fuller multisig workflows, expanded sponsorship and account-configuration cleanup, and broader Soroban asset, allowance, and authorization discovery.
+
+Soroban parity is expected to arrive in stages: SAC balance scanning, configured allowance checks, broader allowance and authorization discovery, asset routing and conversion, DeFi position detection, protocol-specific unwind adapters, and finally merge-readiness checks that fully incorporate Soroban state.
 
 Future protocol extensions can add additional Soroban cleanup capabilities, DeFi unwind support for protocols such as Blend, Aquarius, and Soroswap, route-based asset conversion and recovery flows, and mediator-account support for destinations that cannot directly receive account merges.
 
