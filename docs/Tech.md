@@ -72,14 +72,9 @@ flowchart TB
     BC[(Blend contracts on ledger — via RPC)]
   end
 
-  subgraph Deps["NPM libraries (in-process)"]
+  subgraph Deps["NPM libraries"]
     SKD["@stellar/stellar-sdk"]
     BLEND["@blend-capital/blend-sdk"]
-  end
-
-  subgraph Planned["Documented / README — not fully wired"]
-    PL[Planner / preview / automated tx execution]
-    POS["Handbook position API — not in repo"]
   end
 
   U --> UI
@@ -95,9 +90,6 @@ flowchart TB
   IDX --> DF --> BLEND --> R
   IDX --> DF --> BC
   IDX --> CORE
-
-  UI -.->|future| PL
-  IDX -.->|RFP / docs| POS
 ```
 
 ---
