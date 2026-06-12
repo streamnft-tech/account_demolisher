@@ -45,20 +45,59 @@ This separation preserves the non-custodial signing model while allowing the API
 
 ```mermaid
 flowchart TB
-  User["User / Browser"] --> Web["OrbitWay Web App<br/>React + Vite"]
+  subgraph User["User / browser"]
+    U[Operator]
+  end
 
-  Web --> Wallet["Stellar Wallets Kit<br/>Wallet Connection + Signing"]
-  Web --> API["OrbitWay API<br/>Fastify Backend-for-Frontend"]
+  subgraph DevHost["Developer machine"]
+    subgraph Web["@stellar/web — Vite SPA :5173"]
+      UI[App.tsx — checklist, destination, Orbitway workspace]
+      WK[Stellar Wallets Kit — connect / profile / sign hook]
+      CoreC["@stellar/core — types, isValidClassicAddress"]
+    end
+    subgraph API["@stellar/api — Fastify :8787"]
+      IDX[index.ts — routes + CORS]
+      HZ[horizon.ts — account, offers flags]
+      FC[fetchClassicPositions.ts — SDEX offers]
+      SB[sorobanScan.ts — SAC balances, allowances]
+      DF[defiScan.ts — Blend SDK → RPC]
+      CORE[buildHealthReport — @stellar/core]
+    end
+    PROXY[Vite proxy `/api` → 8787]
+  end
 
-  API --> Horizon["Horizon<br/>Classic Stellar State"]
-  API --> Soroban["Soroban RPC<br/>SAC + Contract Reads"]
-  API --> Protocols["Protocol Checks / Adapters<br/>Blend + Supported Surfaces"]
-  API --> Core["Shared Core Package<br/>Health + Blocker Logic"]
+  subgraph Ext["External Stellar network"]
+    H[(Horizon — classic REST)]
+    R[(Soroban RPC — getLedgerEntries / reads)]
+    BC[(Blend contracts on ledger — via RPC)]
+  end
 
-  Core --> Report["Health Report<br/>Checklist + Blockers + Readiness"]
-  Report --> Web
+  subgraph Deps["NPM libraries (in-process)"]
+    SKD["@stellar/stellar-sdk"]
+    BLEND["@blend-capital/blend-sdk"]
+  end
 
-  Wallet --> Stellar["Stellar Network<br/>Signed Transactions"]
+  subgraph Planned["Documented / README — not fully wired"]
+    PL[Planner / preview / automated tx execution]
+    POS["Handbook position API — not in repo"]
+  end
+
+  U --> UI
+  UI --> WK
+  UI --> CoreC
+  UI -->|HTTP GET `/api/.../health`| PROXY
+  PROXY --> IDX
+
+  IDX --> HZ --> H
+  IDX --> FC --> H
+  IDX --> SB --> R
+  IDX --> SB --> SKD
+  IDX --> DF --> BLEND --> R
+  IDX --> DF --> BC
+  IDX --> CORE
+
+  UI -.->|future| PL
+  IDX -.->|RFP / docs| POS
 ```
 
 ---
