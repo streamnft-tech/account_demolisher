@@ -1,5 +1,7 @@
 # OrbitWay Technical Overview
 
+![Screenshot](./architecture.svg)
+
 OrbitWay is a Stellar account inspection, cleanup, and recovery workflow application. It helps users scan a Stellar account, understand why it cannot be safely closed or merged, and move through the required cleanup steps to recover remaining value or reach a merge-ready state.
 
 The technical problem OrbitWay addresses is that Stellar account state is distributed across multiple surfaces. A single account may contain native XLM, non-native trustlines, open SDEX offers, claimable balances, sponsorships, multisig signers, account data entries, classic liquidity-pool positions, Soroban assets, token allowances, or protocol-level exposure. Any of these can affect whether the account can be safely cleaned up or merged.
