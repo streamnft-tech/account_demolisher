@@ -1,7 +1,5 @@
 # OrbitWay Technical Overview
 
-![Screenshot](./architecture.svg)
-
 OrbitWay is a Stellar account inspection, cleanup, and recovery workflow application. It helps users scan a Stellar account, understand why it cannot be safely closed or merged, and move through the required cleanup steps to recover remaining value or reach a merge-ready state.
 
 The technical problem OrbitWay addresses is that Stellar account state is distributed across multiple surfaces. A single account may contain native XLM, non-native trustlines, open SDEX offers, claimable balances, sponsorships, multisig signers, account data entries, classic liquidity-pool positions, Soroban assets, token allowances, or protocol-level exposure. Any of these can affect whether the account can be safely cleaned up or merged.
@@ -9,6 +7,8 @@ The technical problem OrbitWay addresses is that Stellar account state is distri
 OrbitWay converts this fragmented state into a normalized account-health report. The report explains which parts of the account are clean, which objects are blocking cleanup, which actions require user review, and which states are currently unsupported or unsafe to close. The application is designed as a step-by-step cleanup workflow: scan the account, detect blockers, explain the cleanup plan, prepare supported actions, request wallet-side signing, refresh account state, and continue until the account is either merge-ready or clearly blocked.
 
 The current implementation is structured as a TypeScript monorepo with three main runtime boundaries: a React/Vite web application, a Fastify API service, and a shared TypeScript core package. The web application owns the user workflow, wallet connection, transaction review, and signing flow. The API aggregates read-only network data from Horizon, Soroban RPC, and selected protocol integrations. The shared core package contains the health-report model, blocker types, and account-readiness logic used across the system.
+
+![Screenshot](./architecture.svg)
 
 OrbitWay is intentionally non-custodial. Account scans are read-only, private keys are never sent to the backend, and cleanup transactions require explicit user approval through wallet-side signing. Account merge is treated as the final irreversible step and is only enabled after supported blockers have been resolved and unsupported state has been ruled out or clearly surfaced.
 
