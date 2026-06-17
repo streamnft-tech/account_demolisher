@@ -25,7 +25,7 @@ type BookState =
   | { status: "ok"; thin: boolean; bestPrice: string | null }
   | { status: "error"; message: string };
 
-type TrustlineActionMode = "sdex" | "soroswap" | "payout" | "remove";
+type TrustlineActionMode = "sdex" | "soroswap" | "payout" | "remove" | "burn";
 
 export type TrustlineCleanupSummary = {
   total: number;
@@ -85,6 +85,7 @@ export function TrustlineTeardownCard(props: {
   const [issuerHintsByKey, setIssuerHintsByKey] = useState<Record<string, string[]>>({});
   const [soroswapConfigured, setSoroswapConfigured] = useState<boolean | null>(null);
   const [actionModeByKey, setActionModeByKey] = useState<Record<string, TrustlineActionMode>>({});
+  const [routeSelectionByKey, setRouteSelectionByKey] = useState<Record<string, "send" | "burn" | "sdex" | "soroswap">>({});
 
   const ready =
     Boolean(walletAddress) && !walletMismatch && walletAddress === accountId && Boolean(horizonUrl);
@@ -414,6 +415,11 @@ export function TrustlineTeardownCard(props: {
     }
   };
 
+  const routeSelectionComplete = useMemo(
+    () => positiveRows.every((r) => Boolean(routeSelectionByKey[rowKey(r)])),
+    [positiveRows, routeSelectionByKey],
+  );
+
   if (rows.length === 0 && !loadErr) {
     return (
       <div className={embedded ? `trustlineEmbedded trustlineEmbedded--empty${inlineList ? " trustlineEmbedded--inline" : ""}` : "card trustlineCard"}>
@@ -465,56 +471,51 @@ export function TrustlineTeardownCard(props: {
           const book = bookByKey[k] ?? { status: "idle" };
           const slip = slippageBpsByKey[k] ?? 100;
           const hasBalance = r.balanceNum > 1e-7;
-          const canSell = book.status === "ok" && !book.thin && book.bestPrice !== null && ready && !walletBusy;
-          const canSoroswapSell = soroswapConfigured === true && ready && !walletBusy;
-          const mode = actionModeByKey[k] ?? (hasBalance ? "payout" : "remove");
+          const selectedRoute = routeSelectionByKey[k];
+          const mode = actionModeByKey[k] ?? (selectedRoute === "send" ? "payout" : selectedRoute === "burn" ? "burn" : hasBalance ? "payout" : "remove");
           const hints = issuerHintsByKey[k] ?? [];
-          const actionOptions: Array<{ value: TrustlineActionMode; label: string; disabled?: boolean }> = hasBalance
-            ? [
-                {
-                  value: "sdex",
-                  label:
-                    book.status === "loading"
-                      ? "Swap token · checking liquidity"
-                      : book.status === "error"
-                        ? "Swap token · unavailable"
-                        : book.status === "ok" && book.thin
-                          ? "Swap token · book too thin"
-                          : "Swap token to XLM",
-                  disabled: !(book.status === "ok" && !book.thin && book.bestPrice),
-                },
-                {
-                  value: "soroswap",
-                  label: soroswapConfigured ? "Swap via Soroswap" : "Swap via Soroswap · unavailable",
-                  disabled: soroswapConfigured !== true,
-                },
-                { value: "payout", label: "Send balance" },
-              ]
-            : [{ value: "remove", label: "Remove empty line" }];
+          const routeOptionButtons: Array<{ value: "send" | "burn" | "sdex" | "soroswap"; label: string; disabled?: boolean }> =
+            [
+              { value: "send", label: "Send" },
+              { value: "burn", label: "Burn" },
+              { value: "sdex", label: "SDEX coming soon", disabled: true },
+              { value: "soroswap", label: "Soroswap coming soon", disabled: true },
+            ];
 
           const primaryAction =
             mode === "sdex"
-              ? { label: "Swap token", disabled: !canSell, run: () => void onSell(r) }
+              ? { label: "Remove trustline", disabled: true, run: () => void onSell(r) }
               : mode === "soroswap"
                 ? {
-                    label: soroswapConfigured ? "Swap token" : "Soroswap unavailable",
-                    disabled: !canSoroswapSell,
+                    label: "Remove trustline",
+                    disabled: true,
                     run: () => void onSoroswapSell(r),
                   }
                 : mode === "payout"
                   ? {
-                      label: "Send balance + remove line",
-                      disabled: !ready || walletBusy,
-                      run: () => void onPayIssuerAndRemove(r),
-                    }
+                    label: "Remove trustline",
+                    disabled:
+                        !ready ||
+                        walletBusy ||
+                        !routeSelectionComplete ||
+                        !confirmPayoutByKey[k] ||
+                        !isValidClassicAddress((payoutByKey[k] ?? "").trim()),
+                    run: () => void onPayIssuerAndRemove(r),
+                  }
+                  : mode === "burn"
+                    ? {
+                        label: "Remove trustline",
+                        disabled: true,
+                        run: () => void onRemoveZeroOnly(r),
+                      }
                   : {
-                      label: "Remove empty line",
-                      disabled: !ready || walletBusy,
+                      label: "Remove trustline",
+                      disabled: !ready || walletBusy || !routeSelectionComplete,
                       run: () => void onRemoveZeroOnly(r),
                     };
           return (
             <li key={k} className="trustlineTokenShell">
-              <details className="trustlineToken">
+              <details className="trustlineToken" open={hasBalance}>
                 <summary className="trustlineTokenSummary resultActionRow resultActionRow--value">
                   <div className="trustlineTokenIdentity">
                     <strong>{r.assetCode}</strong>
@@ -533,7 +534,7 @@ export function TrustlineTeardownCard(props: {
                     </span>
                   </div>
                   <span className="stateDetailGroupMeta trustlineTokenActionMeta">
-                    <span>{hasBalance ? actionOptions.filter((option) => !option.disabled).length : 1} action{hasBalance && actionOptions.filter((option) => !option.disabled).length !== 1 ? "s" : ""}</span>
+                    <span>{hasBalance ? 4 : 1} action{hasBalance ? "s" : ""}</span>
                     <span className="stateDetailGroupChevron" aria-hidden>
                       ⌄
                     </span>
@@ -571,63 +572,56 @@ export function TrustlineTeardownCard(props: {
 
                   <div className="trustlinePlanner">
                     <label className="label trustlinePlannerLabel">Choose cleanup route</label>
-                    <div className="trustlinePlannerControls">
-                      <label className="networkSelectWrap trustlineActionSelectWrap">
-                        <select
-                          className="networkSelect trustlineActionSelect"
-                          value={mode}
-                          onChange={(event) =>
-                            setActionModeByKey((prev) => ({
-                              ...prev,
-                              [k]: event.target.value as TrustlineActionMode,
-                            }))
-                          }
-                        >
-                          {actionOptions.map((option) => (
-                            <option key={option.value} value={option.value} disabled={option.disabled}>
-                              {option.label}
-                            </option>
-                          ))}
-                        </select>
-                      </label>
-
-                      {(mode === "sdex" || mode === "soroswap") && hasBalance ? (
-                        <label className="slipLabel">
-                          Slippage (bps)
-                          <input
-                            className="input slipInput"
-                            type="number"
-                            min={0}
-                            max={5000}
-                            step={10}
-                            value={slip}
-                            onChange={(e) =>
-                              setSlippageBpsByKey((prev) => ({
+                    <div className="trustlineRouteChoices">
+                      {routeOptionButtons.map((option) => {
+                        const selected = selectedRoute === option.value;
+                        return (
+                          <button
+                            key={option.value}
+                            type="button"
+                            className={`trustlineRouteChoice${selected ? " trustlineRouteChoice--selected" : ""}`}
+                            aria-pressed={selected}
+                            disabled={option.disabled}
+                            onClick={() =>
+                              setRouteSelectionByKey((prev) => ({
                                 ...prev,
-                                [k]: Math.max(0, Math.min(5000, Number(e.target.value) || 0)),
+                                [k]: option.value,
                               }))
                             }
-                          />
-                        </label>
-                      ) : null}
+                          >
+                            {option.label}
+                          </button>
+                        );
+                      })}
                     </div>
 
+                    {(mode === "sdex" || mode === "soroswap") && hasBalance ? (
+                      <label className="slipLabel">
+                        Slippage (bps)
+                        <input
+                          className="input slipInput"
+                          type="number"
+                          min={0}
+                          max={5000}
+                          step={10}
+                          value={slip}
+                          onChange={(e) =>
+                            setSlippageBpsByKey((prev) => ({
+                              ...prev,
+                              [k]: Math.max(0, Math.min(5000, Number(e.target.value) || 0)),
+                            }))
+                          }
+                        />
+                      </label>
+                    ) : null}
+
+
                     <div className="trustlinePlannerHint">
-                      {mode === "sdex"
-                        ? book.status === "loading"
-                          ? "Checking whether the SDEX book is deep enough for this token line."
-                          : book.status === "error"
-                            ? book.message
-                            : book.status === "ok" && book.thin
-                              ? "The current SDEX book is too thin for a clean exit. Try another route."
-                              : "Use the SDEX book to convert this token into XLM before removing the trustline."
-                        : mode === "soroswap"
-                          ? soroswapConfigured
-                            ? "Route through Soroswap when on-chain liquidity is available for a classic to native exit."
-                            : "Soroswap routing is not configured in this environment."
-                          : mode === "payout"
-                            ? "Send the full token balance to a confirmed destination, then remove the trustline in the same signed step."
-                            : "This line is already empty and can be removed directly."}
+                      {mode === "payout"
+                        ? "Send the full token balance to a confirmed destination, then remove the trustline in the same signed step."
+                        : mode === "burn"
+                          ? "Burn routing is staged in the planner, but the execution path is not yet wired."
+                          : "This line is already empty and can be removed directly."}
                     </div>
 
                     {mode === "payout" && hasBalance ? (
@@ -653,10 +647,12 @@ export function TrustlineTeardownCard(props: {
                     ) : null}
 
                     <div className="trustlinePlannerFooter">
-                      <span className="trustlineStepTitle trustlineStepTitle--inline">Final action</span>
+                      <span className="trustlineStepTitle trustlineStepTitle--inline">
+                        {selectedRoute ? `Route selected: ${selectedRoute === "send" ? "Send" : selectedRoute === "burn" ? "Burn" : selectedRoute === "sdex" ? "SDEX coming soon" : "Soroswap coming soon"}` : "Select a route to continue"}
+                      </span>
                       <button
                         type="button"
-                        className={primaryAction.disabled ? "btn ghost" : "btn secondary"}
+                        className={primaryAction.disabled ? "btn ghost" : "btn primary"}
                         disabled={primaryAction.disabled}
                         onClick={primaryAction.run}
                       >

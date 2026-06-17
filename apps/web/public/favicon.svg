@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none" aria-hidden="true">
+  <defs>
+    <linearGradient id="g" x1="14" y1="12" x2="50" y2="52" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#56d3ff"/>
+      <stop offset="0.5" stop-color="#2dd4bf"/>
+      <stop offset="1" stop-color="#f59e0b"/>
+    </linearGradient>
+  </defs>
+  <rect width="64" height="64" rx="16" fill="#0a1018"/>
+  <circle cx="32" cy="32" r="16" stroke="url(#g)" stroke-width="4"/>
+  <ellipse cx="32" cy="32" rx="22" ry="9" transform="rotate(-26 32 32)" stroke="url(#g)" stroke-width="4" opacity="0.92"/>
+  <circle cx="45" cy="18" r="3.2" fill="#56d3ff"/>
+</svg>
