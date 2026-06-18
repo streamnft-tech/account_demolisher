@@ -1669,8 +1669,8 @@ function AppShell() {
     },
     {
       label: "No unsupported Soroban / DeFi blockers",
-      right: defiReviewCount === 0 ? "Ready" : "Cleanup required",
-      tone: defiReviewCount === 0 ? "ok" : "fail",
+      right: defiReviewCount === 0 ? "Ready" : "Review only",
+      tone: defiReviewCount === 0 ? "ok" : "neutral",
     },
     {
       label: "Destination reviewed",
@@ -1695,8 +1695,7 @@ function AppShell() {
     trustlineCount === 0 &&
     sponsorshipCount === 0 &&
     dataEntryCount === 0 &&
-    !controlNeedsCleanup &&
-    defiReviewCount === 0;
+    !controlNeedsCleanup;
   const mergeCanProceed = Boolean(
     health?.canDemolish && destOk && mergeDestinationAcknowledged && mergeAcknowledgedIrreversible && mergeChecklistReady,
   );
