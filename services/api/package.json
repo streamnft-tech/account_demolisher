@@ -15,6 +15,7 @@
     "@fastify/cors": "^10.0.1",
     "@stellar/core": "*",
     "@stellar/stellar-sdk": "^13.3.0",
+    "dotenv": "^16.6.1",
     "fastify": "^5.1.0"
   },
   "devDependencies": {

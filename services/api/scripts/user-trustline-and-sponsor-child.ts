@@ -4,6 +4,7 @@
  * - Mint to user.
  * - Sponsor-create a new child account.
  */
+import "dotenv/config";
 import {
   Asset,
   BASE_FEE,
