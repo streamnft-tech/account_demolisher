@@ -1,5 +1,5 @@
 import { Component, useCallback, useEffect, useRef, useState, type CSSProperties, type ErrorInfo, type ReactNode } from "react";
-import type { Blocker, BlockerCode, ChecklistStatus, HealthChecklistItem, HealthReport, SponsoredLedgerEntry } from "@stellar/core";
+import type { Blocker, BlockerCode, HealthChecklistItem, HealthReport } from "@stellar/core";
 import { isValidClassicAddress } from "@stellar/core";
 import type { UiNetwork } from "./network.js";
 import {
@@ -11,7 +11,6 @@ import {
   signWithWallet,
 } from "./walletKit.js";
 import { runClassicBlockerFix } from "./classicBlockerHandlers.js";
-import { buildRevokeSponsorshipEntryXdr } from "./sponsorshipRevoke.js";
 import type { ClassicBatchResult } from "./classicClose.js";
 import { sdkPassphrase, submitSignedClassicTx } from "./classicClose.js";
 import { buildAccountMergeBatchXdr } from "./classicDemolish.js";
@@ -167,23 +166,6 @@ const footerLinks = {
     ["Report issue", "https://github.com/streamnft-tech/account_demolisher/issues"],
   ],
 };
-
-type ReviewCardTone = "value" | "state" | "warn";
-type ReviewCardBadgeTone = "ok" | "warn" | "neutral";
-type WorkflowActionMode = "tx" | "planner" | "manual" | "disabled";
-
-function statusGlyph(status: ChecklistStatus): string {
-  switch (status) {
-    case "pass":
-      return "✓";
-    case "fail":
-      return "✕";
-    case "skipped":
-      return "–";
-    default:
-      return "?";
-  }
-}
 
 function loadWatchlist(): WatchlistEntry[] {
   if (typeof window === "undefined") return [];
@@ -362,7 +344,7 @@ function AccountHealthResultLegacy() {
   );
 }
 
-function AccountHealthPreview() {
+function AccountHealthPreview({ liveStats }: { liveStats: LiveStatsState }) {
   const orbitCards = [
     { label: "Trustlines", detail: "3 trustlines", value: "+1.50 XLM" },
     { label: "Open offers", detail: "4 open offers", value: "+2.00 XLM" },
@@ -443,11 +425,13 @@ function AccountHealthPreview() {
           <strong>8.30 XLM</strong>
         </div>
       </div>
+
+      <LiveStatsPanel stats={liveStats} compact />
     </aside>
   );
 }
 
-function LandingPage() {
+function LandingPage({ liveStats }: { liveStats: LiveStatsState }) {
   const scrolled = useScrolled();
   const [heroAddress, setHeroAddress] = useState("");
   const [menuOpen, setMenuOpen] = useState(false);
@@ -548,7 +532,7 @@ function LandingPage() {
               </NavLink>
             </div>
           </div>
-          <AccountHealthPreview />
+          <AccountHealthPreview liveStats={liveStats} />
         </section>
 
         <section className="infoGrid infoGrid--landing" id="problem">
@@ -805,28 +789,238 @@ function formatEstimatedXlm(value: number): string {
   }).format(value) + " XLM";
 }
 
-function formatLongKey(key: string): string {
-  if (key.length <= 18) return key;
-  return `${key.slice(0, 8)}...${key.slice(-6)}`;
+type LiveStatsSnapshot = {
+  testnetClosedCount: number;
+  mainnetClosedCount: number;
+  recoveredXlmTotal: number;
+  updatedAt: string | null;
+};
+
+type LiveStatsEventKind = "cleanup" | "close";
+type LiveStatsNetwork = "testnet" | "mainnet";
+
+type LiveStatsEventInput = {
+  id: string;
+  kind: LiveStatsEventKind;
+  network: LiveStatsNetwork;
+  recoveredXlm?: number;
+};
+
+const EMPTY_LIVE_STATS: LiveStatsSnapshot = {
+  testnetClosedCount: 0,
+  mainnetClosedCount: 0,
+  recoveredXlmTotal: 0,
+  updatedAt: null,
+};
+
+type LiveStatsState = {
+  snapshot: LiveStatsSnapshot;
+  loading: boolean;
+  stale: boolean;
+  error: string | null;
+  lastFetchedAt: number | null;
+};
+
+type LiveStatsController = LiveStatsState & {
+  refresh: () => Promise<void>;
+  recordEvent: (event: LiveStatsEventInput) => Promise<LiveStatsSnapshot | null>;
+};
+
+function formatLiveStatsRecency(updatedAt: string | null): string {
+  if (!updatedAt) return "No updates yet";
+  const time = Date.parse(updatedAt);
+  if (!Number.isFinite(time)) return "Recently updated";
+  const diffMs = Date.now() - time;
+  if (diffMs < 60_000) return "Updated just now";
+  const diffMinutes = Math.max(1, Math.round(diffMs / 60_000));
+  if (diffMinutes < 60) return `Updated ${diffMinutes}m ago`;
+  const diffHours = Math.max(1, Math.round(diffMinutes / 60));
+  if (diffHours < 24) return `Updated ${diffHours}h ago`;
+  const diffDays = Math.max(1, Math.round(diffHours / 24));
+  return `Updated ${diffDays}d ago`;
 }
 
-function sponsorshipEntryKey(entry: SponsoredLedgerEntry): string {
-  return `${entry.type}:${entry.id}:${entry.accountId ?? ""}`;
+function formatLiveStatsValue(value: number): string {
+  if (!Number.isFinite(value)) return "0";
+  const compact = new Intl.NumberFormat(undefined, {
+    notation: "compact",
+    maximumFractionDigits: value >= 100 ? 0 : 2,
+  }).format(value);
+  return compact;
 }
 
-function sponsorshipEntryAddress(entry: SponsoredLedgerEntry): string {
-  return entry.accountId ?? entry.id;
+function useLiveStats(): LiveStatsController {
+  const [snapshot, setSnapshot] = useState<LiveStatsSnapshot>(EMPTY_LIVE_STATS);
+  const [loading, setLoading] = useState(true);
+  const [stale, setStale] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [lastFetchedAt, setLastFetchedAt] = useState<number | null>(null);
+  const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
+  const hasLoadedOnceRef = useRef(false);
+
+  const refresh = useCallback(async () => {
+    const controller = new AbortController();
+    const timeout = window.setTimeout(() => controller.abort(), 15_000);
+    if (hasLoadedOnceRef.current) {
+      setStale(false);
+      setError(null);
+      setLoading(true);
+    } else {
+      setLoading(true);
+    }
+    try {
+      const res = await fetch("/api/stats/live", { signal: controller.signal });
+      const text = await res.text();
+      if (!res.ok) {
+        let message = `HTTP ${res.status}`;
+        try {
+          const parsed = JSON.parse(text) as { message?: string };
+          if (parsed.message) message = parsed.message;
+        } catch {
+          /* ignore */
+        }
+        throw new Error(message);
+      }
+      const parsed = JSON.parse(text) as Partial<LiveStatsSnapshot>;
+      setSnapshot({
+        testnetClosedCount: Number.isFinite(parsed.testnetClosedCount) ? Math.max(0, Math.trunc(Number(parsed.testnetClosedCount))) : 0,
+        mainnetClosedCount: Number.isFinite(parsed.mainnetClosedCount) ? Math.max(0, Math.trunc(Number(parsed.mainnetClosedCount))) : 0,
+        recoveredXlmTotal: Number.isFinite(parsed.recoveredXlmTotal) ? Math.max(0, Number(parsed.recoveredXlmTotal)) : 0,
+        updatedAt: typeof parsed.updatedAt === "string" && parsed.updatedAt.trim().length > 0 ? parsed.updatedAt : null,
+      });
+      setLastFetchedAt(Date.now());
+      hasLoadedOnceRef.current = true;
+      setHasLoadedOnce(true);
+      setStale(false);
+      setError(null);
+    } catch (err) {
+      hasLoadedOnceRef.current = true;
+      setHasLoadedOnce(true);
+      setStale(true);
+      setError(err instanceof Error ? err.message : "Live stats unavailable");
+    } finally {
+      setLoading(false);
+      window.clearTimeout(timeout);
+    }
+  }, []);
+
+  useEffect(() => {
+    void refresh();
+    const interval = window.setInterval(() => {
+      void refresh();
+    }, 4 * 60 * 60 * 1000);
+    return () => window.clearInterval(interval);
+  }, [refresh]);
+
+  const recordEvent = useCallback(async (event: LiveStatsEventInput) => {
+    const controller = new AbortController();
+    const timeout = window.setTimeout(() => controller.abort(), 15_000);
+    try {
+      const res = await fetch("/api/stats/live/event", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(event),
+        signal: controller.signal,
+      });
+      const text = await res.text();
+      if (!res.ok) {
+        let message = `HTTP ${res.status}`;
+        try {
+          const parsed = JSON.parse(text) as { message?: string };
+          if (parsed.message) message = parsed.message;
+        } catch {
+          /* ignore */
+        }
+        throw new Error(message);
+      }
+      const parsed = JSON.parse(text) as Partial<LiveStatsSnapshot>;
+      const nextSnapshot: LiveStatsSnapshot = {
+        testnetClosedCount: Number.isFinite(parsed.testnetClosedCount) ? Math.max(0, Math.trunc(Number(parsed.testnetClosedCount))) : 0,
+        mainnetClosedCount: Number.isFinite(parsed.mainnetClosedCount) ? Math.max(0, Math.trunc(Number(parsed.mainnetClosedCount))) : 0,
+        recoveredXlmTotal: Number.isFinite(parsed.recoveredXlmTotal) ? Math.max(0, Number(parsed.recoveredXlmTotal)) : 0,
+        updatedAt: typeof parsed.updatedAt === "string" && parsed.updatedAt.trim().length > 0 ? parsed.updatedAt : null,
+      };
+      setSnapshot(nextSnapshot);
+      setLastFetchedAt(Date.now());
+      setHasLoadedOnce(true);
+      setStale(false);
+      setError(null);
+      return nextSnapshot;
+    } catch (err) {
+      setStale(true);
+      setError(err instanceof Error ? err.message : "Live stats event recording failed");
+      return null;
+    } finally {
+      window.clearTimeout(timeout);
+    }
+  }, []);
+
+  return {
+    snapshot,
+    loading: loading && !hasLoadedOnce,
+    stale,
+    error,
+    lastFetchedAt,
+    refresh,
+    recordEvent,
+  };
 }
 
-function canRevokeSponsoredEntry(entry: SponsoredLedgerEntry): boolean {
-  return entry.type !== "trustline";
+function LiveStatsPanel({
+  stats,
+  compact = false,
+}: {
+  stats: LiveStatsState;
+  compact?: boolean;
+}) {
+  const isEmpty = stats.snapshot.testnetClosedCount === 0 && stats.snapshot.mainnetClosedCount === 0 && stats.snapshot.recoveredXlmTotal === 0;
+  const title = stats.loading && !stats.lastFetchedAt ? "Loading live stats" : stats.stale ? "Live stats stale" : isEmpty ? "Waiting for activity" : "Live stats";
+  const subtitle = stats.loading && !stats.lastFetchedAt
+    ? "Syncing the first snapshot."
+    : stats.stale
+      ? stats.error
+        ? `Showing last known snapshot · ${stats.error}`
+        : "Showing last known snapshot."
+      : isEmpty
+        ? "No confirmed events yet."
+        : formatLiveStatsRecency(stats.snapshot.updatedAt);
+  const liveStateLabel = stats.stale ? "Stale" : stats.loading && !stats.lastFetchedAt ? "Syncing" : "Live";
+  return (
+    <aside className={`liveStatsCard${compact ? " liveStatsCard--compact" : ""}${stats.stale ? " liveStatsCard--stale" : ""}`} aria-label="Live stats">
+      <div className="liveStatsCardHeader">
+        <div className={`liveStatsCardStatus liveStatsCardStatus--${stats.stale ? "stale" : stats.loading && !stats.lastFetchedAt ? "loading" : "live"}`}>
+          <span aria-hidden="true" />
+          <strong>{liveStateLabel}</strong>
+        </div>
+        <div className="liveStatsCardTitleBlock">
+          <span className="liveStatsCardEyebrow">Live stats</span>
+          <strong>{title}</strong>
+          <p>{subtitle}</p>
+        </div>
+      </div>
+      <div className="liveStatsCardRows">
+        <div className="liveStatsMetric">
+          <span>Testnet closed</span>
+          <strong>{stats.snapshot.testnetClosedCount}</strong>
+        </div>
+        <div className="liveStatsMetric">
+          <span>Mainnet closed</span>
+          <strong>{stats.snapshot.mainnetClosedCount}</strong>
+        </div>
+        <div className="liveStatsMetric liveStatsMetric--accent">
+          <span>Value recovered</span>
+          <strong>{formatLiveStatsValue(stats.snapshot.recoveredXlmTotal)} XLM</strong>
+        </div>
+      </div>
+      <div className="liveStatsCardFooter">
+        <span>{stats.snapshot.updatedAt ? formatLiveStatsRecency(stats.snapshot.updatedAt) : "Updated after the next successful action"}</span>
+        <span>{stats.lastFetchedAt ? `Synced ${Math.max(1, Math.round((Date.now() - stats.lastFetchedAt) / 60_000))}m ago` : "4h refresh cadence"}</span>
+      </div>
+    </aside>
+  );
 }
 
-function sponsorshipEntryTypeLabel(type: SponsoredLedgerEntry["type"]): string {
-  return type.replaceAll("_", " ");
-}
-
-function AppShell() {
+function AppShell({ liveStats }: { liveStats: LiveStatsController }) {
   const [activeSection, setActiveSection] = useState<AppSection>("scan");
   const [reviewTab, setReviewTab] = useState<ReviewTab>("recoverable");
   const [mergeDestinationMode, setMergeDestinationMode] = useState<"wallet" | "exchange" | "unsure">("wallet");
@@ -842,8 +1036,6 @@ function AppShell() {
   const [actionSuccess, setActionSuccess] = useState<string | null>(null);
   const [lastScannedAt, setLastScannedAt] = useState<number | null>(null);
   const [watchlist, setWatchlist] = useState<WatchlistEntry[]>(() => loadWatchlist());
-  const [watchlistDraft, setWatchlistDraft] = useState("");
-  const [closeConfirm, setCloseConfirm] = useState("");
   const [destinationModalOpen, setDestinationModalOpen] = useState(false);
   const [destinationDraft, setDestinationDraft] = useState("");
   const [didAutoloadQueryAccount, setDidAutoloadQueryAccount] = useState(false);
@@ -851,12 +1043,10 @@ function AppShell() {
   const [mergeAcknowledgedDestination, setMergeAcknowledgedDestination] = useState<string | null>(null);
   const [mergeAcknowledgedIrreversible, setMergeAcknowledgedIrreversible] = useState(false);
   const [trustlineSummary, setTrustlineSummary] = useState<TrustlineCleanupSummary | null>(null);
-  const [pendingClassicAction, setPendingClassicAction] = useState<BlockerCode | null>(null);
-  const [pendingSponsoredEntryKey, setPendingSponsoredEntryKey] = useState<string | null>(null);
   const [cleanupFocusStep, setCleanupFocusStep] = useState<CleanupStepId | null>(null);
   const [cleanupReviewStep, setCleanupReviewStep] = useState<CleanupStepId | null>(null);
   const [cleanupTrustlinePlannerOpen, setCleanupTrustlinePlannerOpen] = useState(false);
-  const cleanupStepRefs = useRef<Partial<Record<CleanupStepId, HTMLDivElement | null>>>({});
+  const cleanupStepRefs = useRef<Partial<Record<CleanupStepId, HTMLElement | null>>>({});
 
   useEffect(() => {
     void ensureWalletKit(network);
@@ -925,8 +1115,6 @@ function AppShell() {
       setError(null);
       setHealth(null);
       setActionSuccess(null);
-      setPendingClassicAction(null);
-      setPendingSponsoredEntryKey(null);
       if (!isValidClassicAddress(trimmed)) {
         setError("Enter a valid classic G-address (56 chars).");
         return null;
@@ -967,24 +1155,10 @@ function AppShell() {
     await scanAccount(source.trim(), network);
   }, [source, network, scanAccount]);
 
-  const resetOverview = useCallback(() => {
-    setSource("");
-    setHealth(null);
-    setError(null);
-    setActionSuccess(null);
-    setLastScannedAt(null);
-    setDestination("");
-    setCloseConfirm("");
-    setTrustlineSummary(null);
-    setCleanupTrustlinePlannerOpen(false);
-    setPendingClassicAction(null);
-    setPendingSponsoredEntryKey(null);
-  }, []);
-
   const refreshHealth = useCallback(async () => {
     if (!source.trim()) return;
-    setLoading(true);
-    setError(null);
+      setLoading(true);
+      setError(null);
     try {
       const q = new URLSearchParams({ network });
       const res = await fetchHealth(`/api/account/${encodeURIComponent(source.trim())}/health?${q}`);
@@ -1028,56 +1202,43 @@ function AppShell() {
       const id = source.trim();
       if (!health?.horizonUrl || !walletAddress || !isValidClassicAddress(id)) return;
       setWalletBusy(true);
-      setPendingClassicAction(code);
       setWalletError(null);
       setActionSuccess(null);
       try {
-        const msg = await runClassicBlockerFix(code, {
+        const recoveredXlm =
+          code === "OPEN_OFFERS"
+            ? (health.openPositions?.sdexOffers?.length ?? 0) * BASE_RESERVE_XLM
+            : code === "DATA_ENTRIES"
+              ? ((health.checklist.find((row) => row.id === "classic_data_entries")?.status === "pass" ? 0 : 2) * BASE_RESERVE_XLM)
+              : code === "SPONSORING_OTHER_ACCOUNTS"
+                ? (health.classicAccount?.sponsorships.sponsoringCount ?? 0) * BASE_RESERVE_XLM
+                : code === "MULTISIG_OR_EXTRA_SIGNERS"
+                  ? (health.classicAccount?.signers?.extra?.length ?? 0) * BASE_RESERVE_XLM
+                  : code === "TRUSTLINES_OR_ASSET_BALANCES"
+                    ? (trustlineSummary?.empty ?? 0) * BASE_RESERVE_XLM
+                    : 0;
+        const result = await runClassicBlockerFix(code, {
           accountId: id,
           horizonUrl: health.horizonUrl,
           network,
           signSubmit: signSubmitClassicBatch,
           lpShares: health.openPositions?.liquidityPoolShares,
         });
-        setActionSuccess(msg);
-        await refreshHealth();
-      } catch (e) {
-        setWalletError(formatWalletError(e));
-      } finally {
-        setWalletBusy(false);
-        setPendingClassicAction(null);
-      }
-    },
-    [health, network, source, walletAddress, refreshHealth, signSubmitClassicBatch],
-  );
-
-  const revokeSponsoredEntry = useCallback(
-    async (entry: SponsoredLedgerEntry) => {
-      const id = source.trim();
-      if (!health?.horizonUrl || !walletAddress || !isValidClassicAddress(id)) return;
-      const key = sponsorshipEntryKey(entry);
-      setWalletBusy(true);
-      setPendingSponsoredEntryKey(key);
-      setWalletError(null);
-      setActionSuccess(null);
-      try {
-        const batch = await buildRevokeSponsorshipEntryXdr({
-          horizonUrl: health.horizonUrl,
-          sponsorAccountId: id,
+        setActionSuccess(result.message);
+        await liveStats.recordEvent({
+          id: result.hash,
+          kind: "cleanup",
           network,
-          entry,
+          recoveredXlm,
         });
-        const { hash } = await signSubmitClassicBatch(batch);
-        setActionSuccess(`Sponsorship revoked. Tx ${hash.slice(0, 10)}... Re-run health when Horizon catches up.`);
         await refreshHealth();
       } catch (e) {
         setWalletError(formatWalletError(e));
       } finally {
         setWalletBusy(false);
-        setPendingSponsoredEntryKey(null);
       }
     },
-    [health?.horizonUrl, network, refreshHealth, signSubmitClassicBatch, source, walletAddress],
+    [health, liveStats, network, refreshHealth, signSubmitClassicBatch, source, trustlineSummary, walletAddress],
   );
 
   const runAccountMerge = useCallback(async () => {
@@ -1106,13 +1267,19 @@ function AppShell() {
       setActionSuccess(
         `Account merge submitted. Tx ${hash.slice(0, 10)}… Native XLM (minus fee) credits the destination; this account should disappear once Horizon confirms.`,
       );
+      await liveStats.recordEvent({
+        id: hash,
+        kind: "close",
+        network,
+        recoveredXlm: typeof health?.nativeBalanceXlm === "number" ? health.nativeBalanceXlm : 0,
+      });
       await refreshHealth();
     } catch (e) {
       setWalletError(formatWalletError(e));
     } finally {
       setMergeBusy(false);
     }
-  }, [health, network, source, destination, walletAddress, refreshHealth, signSubmitClassicBatch]);
+  }, [health, liveStats, network, source, destination, walletAddress, refreshHealth, signSubmitClassicBatch]);
 
   const destOk = isValidClassicAddress(destination.trim());
   const blocking = health?.blockers.filter((b: Blocker) => b.kind === "blocking") ?? [];
@@ -1181,16 +1348,6 @@ function AppShell() {
     },
     [],
   );
-
-  const removeFromWatchlist = useCallback((accountId: string, targetNetwork: UiNetwork) => {
-    setWatchlist((prev) => prev.filter((entry) => !(entry.accountId === accountId && entry.network === targetNetwork)));
-  }, []);
-
-  const selectWatchlistAccount = useCallback((entry: WatchlistEntry, targetSection: AppSection = "scan") => {
-    setSource(entry.accountId);
-    setNetwork(entry.network);
-    setActiveSection(targetSection);
-  }, []);
 
   useEffect(() => {
     if (activeSection !== "clean" || !cleanupFocusStep) return;
@@ -1322,7 +1479,7 @@ function AppShell() {
       },
       {
         title: "Data entry reserves",
-        detail: `${dataEntryCount} data entr${dataEntryCount === 1 ? "y" : "ies"} × 0.50 XLM`,
+        detail: `${dataEntryCount} data entr${dataEntryCount > 1 ? "ies" : "y"} × 0.50 XLM`,
         body: dataEntryCount > 0 ? "Each data entry locks 0.50 XLM until cleared." : "No data entries are currently blocking this account.",
         metaLeft: `+${(dataEntryCount * 0.5).toFixed(2)} XLM unlockable`,
         metaRight: dataEntryCount > 0 ? "Signing: Required" : "Not a blocker",
@@ -1975,6 +2132,8 @@ function AppShell() {
                   <p>Scan a Stellar address to see what needs attention before you clean up or merge the account.</p>
                 </div>
 
+                <LiveStatsPanel stats={liveStats} compact />
+
                 <section className="scanWorkspace">
                   <div className="card consolePrimaryCard scanFormCard scanFormCard--hero">
                     <h2 className="cardTitle">Scan a Stellar address</h2>
@@ -2251,6 +2410,7 @@ function AppShell() {
                   setWalletBusy={setWalletBusy}
                   setWalletError={setWalletError}
                   setActionSuccess={setActionSuccess}
+                  onRecoveredEvent={(event) => void liveStats.recordEvent(event)}
                   offersBlocked={checklistById.get("classic_open_offers")?.status === "fail"}
                   onSummaryChange={setTrustlineSummary}
                   onSubmitted={refreshHealth}
@@ -2509,5 +2669,6 @@ function AppShell() {
 
 export function App() {
   const route = useRouteMode();
-  return <AppErrorBoundary>{route === "app" ? <AppShell /> : <LandingPage />}</AppErrorBoundary>;
+  const liveStats = useLiveStats();
+  return <AppErrorBoundary>{route === "app" ? <AppShell liveStats={liveStats} /> : <LandingPage liveStats={liveStats} />}</AppErrorBoundary>;
 }

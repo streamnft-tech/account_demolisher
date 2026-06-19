@@ -15,6 +15,7 @@ import { fetchSponsoredEntriesForSponsor } from "./fetchSponsoredEntries.js";
 import { scanDefiProtocols } from "./defiScan.js";
 import { resolveSorobanRpcUrl, scanSorobanForAccount } from "./sorobanScan.js";
 import { buildSoroswapSellCreditToNativeXdr, soroswapBearerConfigured } from "./soroswapClient.js";
+import { getLiveStatsSnapshot, recordLiveStatsEvent, type LiveStatsEventInput } from "./liveStats.js";
 
 /** Avoids URIError from `decodeURIComponent` on malformed `%` escapes (would otherwise yield HTTP 500). */
 function decodeAccountIdParam(raw: string): string {
@@ -57,6 +58,54 @@ app.get("/health", async () => {
           mainnet: "https://soroban-rpc.mainnet.stellar.gateway.fm",
         },
   };
+});
+
+app.get("/api/stats/live", async (_request, reply) => {
+  try {
+    return reply.send(await getLiveStatsSnapshot());
+  } catch (error) {
+    return reply.status(500).send({
+      error: "STATS_UNAVAILABLE",
+      message: error instanceof Error ? error.message : "Unable to load live stats.",
+    });
+  }
+});
+
+app.post("/api/stats/live/event", async (request, reply) => {
+  const body = request.body as Partial<LiveStatsEventInput> | null;
+  const id = typeof body?.id === "string" ? body.id.trim() : "";
+  const kind = body?.kind;
+  const network = body?.network;
+  const recoveredXlm = body?.recoveredXlm;
+
+  if (!id) {
+    return reply.status(400).send({ error: "INVALID_EVENT", message: "Event id is required." });
+  }
+  if (kind !== "cleanup" && kind !== "close") {
+    return reply.status(400).send({ error: "INVALID_EVENT", message: "Event kind must be cleanup or close." });
+  }
+  if (network !== "testnet" && network !== "mainnet") {
+    return reply.status(400).send({ error: "INVALID_EVENT", message: "Event network must be testnet or mainnet." });
+  }
+  if (recoveredXlm !== undefined && (!Number.isFinite(Number(recoveredXlm)) || Number(recoveredXlm) < 0)) {
+    return reply.status(400).send({ error: "INVALID_EVENT", message: "recoveredXlm must be a non-negative number." });
+  }
+
+  try {
+    const snapshot = await recordLiveStatsEvent({
+      id,
+      kind,
+      network,
+      recoveredXlm,
+    });
+    return reply.send(snapshot);
+  } catch (error) {
+    request.log.error(error);
+    return reply.status(500).send({
+      error: "STATS_WRITE_FAILED",
+      message: error instanceof Error ? error.message : "Unable to record live stats event.",
+    });
+  }
 });
 
 app.get("/api/account/:accountId/horizon", async (request, reply) => {

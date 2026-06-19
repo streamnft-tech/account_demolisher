@@ -52,6 +52,7 @@ export function TrustlineTeardownCard(props: {
   setWalletBusy: (v: boolean) => void;
   setWalletError: (msg: string | null) => void;
   setActionSuccess: (msg: string | null) => void;
+  onRecoveredEvent?: (event: { id: string; kind: "cleanup"; network: UiNetwork; recoveredXlm: number }) => Promise<void> | void;
   offersBlocked?: boolean;
   onSummaryChange?: (summary: TrustlineCleanupSummary) => void;
   onSubmitted: () => Promise<void>;
@@ -68,6 +69,7 @@ export function TrustlineTeardownCard(props: {
     setWalletBusy,
     setWalletError,
     setActionSuccess,
+    onRecoveredEvent,
     offersBlocked = false,
     onSummaryChange,
     onSubmitted,
@@ -374,6 +376,7 @@ export function TrustlineTeardownCard(props: {
       });
       const { hash } = await signSubmit(xdr);
       setActionSuccess(`Payment + trustline removal submitted. Tx ${hash.slice(0, 10)}…`);
+      await onRecoveredEvent?.({ id: hash, kind: "cleanup", network, recoveredXlm: 0.5 });
       await onSubmitted();
       await reload();
     } catch (e) {
@@ -406,6 +409,7 @@ export function TrustlineTeardownCard(props: {
       });
       const { hash } = await signSubmit(xdr);
       setActionSuccess(`ChangeTrust (limit 0) submitted. Tx ${hash.slice(0, 10)}…`);
+      await onRecoveredEvent?.({ id: hash, kind: "cleanup", network, recoveredXlm: 0.5 });
       await onSubmitted();
       await reload();
     } catch (e) {
@@ -466,11 +470,10 @@ export function TrustlineTeardownCard(props: {
       ) : null}
       {loadErr ? <p className="error">{loadErr}</p> : null}
       <ul className="trustlineList">
-        {allRows.map((r) => {
-          const k = rowKey(r);
-          const book = bookByKey[k] ?? { status: "idle" };
-          const slip = slippageBpsByKey[k] ?? 100;
-          const hasBalance = r.balanceNum > 1e-7;
+      {allRows.map((r) => {
+        const k = rowKey(r);
+        const slip = slippageBpsByKey[k] ?? 100;
+        const hasBalance = r.balanceNum > 1e-7;
           const selectedRoute = routeSelectionByKey[k];
           const mode = actionModeByKey[k] ?? (selectedRoute === "send" ? "payout" : selectedRoute === "burn" ? "burn" : hasBalance ? "payout" : "remove");
           const hints = issuerHintsByKey[k] ?? [];

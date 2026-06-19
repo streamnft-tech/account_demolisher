@@ -25,7 +25,10 @@ export type ClassicBlockerDeps = {
 };
 
 /** Run the automated classic fix for this `Blocker.code`, or throw. */
-export async function runClassicBlockerFix(code: BlockerCode, deps: ClassicBlockerDeps): Promise<string> {
+export async function runClassicBlockerFix(
+  code: BlockerCode,
+  deps: ClassicBlockerDeps,
+): Promise<{ message: string; hash: string }> {
   const { accountId, horizonUrl, network, signSubmit, lpShares } = deps;
 
   switch (code) {
@@ -41,12 +44,12 @@ export async function runClassicBlockerFix(code: BlockerCode, deps: ClassicBlock
         );
       }
       const { hash } = await signSubmit(batch);
-      return formatBatchSuccess("RevokeSponsorship", batch, hash);
+      return { hash, message: formatBatchSuccess("RevokeSponsorship", batch, hash) };
     }
     case "DATA_ENTRIES": {
       const batch = await buildClearDataEntriesBatchXdr({ horizonUrl, sourceAccount: accountId, network });
       const { hash } = await signSubmit(batch);
-      return formatBatchSuccess("ManageData (remove)", batch, hash);
+      return { hash, message: formatBatchSuccess("ManageData (remove)", batch, hash) };
     }
     case "OPEN_OFFERS": {
       const offers = await fetchOpenOffersFromApi(accountId, network);
@@ -57,7 +60,7 @@ export async function runClassicBlockerFix(code: BlockerCode, deps: ClassicBlock
         offers,
       });
       const { hash } = await signSubmit(batch);
-      return formatBatchSuccess("Cancel offers", batch, hash);
+      return { hash, message: formatBatchSuccess("Cancel offers", batch, hash) };
     }
     case "OPEN_LIQUIDITY_POOL": {
       const batch = await buildWithdrawLiquidityPoolsBatchXdr({
@@ -67,7 +70,7 @@ export async function runClassicBlockerFix(code: BlockerCode, deps: ClassicBlock
         pools: lpShares ?? [],
       });
       const { hash } = await signSubmit(batch);
-      return formatBatchSuccess("Liquidity pool withdraw", batch, hash);
+      return { hash, message: formatBatchSuccess("Liquidity pool withdraw", batch, hash) };
     }
     case "TRUSTLINES_OR_ASSET_BALANCES": {
       const batch = await buildRemoveEmptyTrustlinesBatchXdr({
@@ -76,7 +79,7 @@ export async function runClassicBlockerFix(code: BlockerCode, deps: ClassicBlock
         network,
       });
       const { hash } = await signSubmit(batch);
-      return formatBatchSuccess("ChangeTrust (remove empty)", batch, hash);
+      return { hash, message: formatBatchSuccess("ChangeTrust (remove empty)", batch, hash) };
     }
     case "MULTISIG_OR_EXTRA_SIGNERS":
     case "NON_DEFAULT_THRESHOLDS": {
@@ -86,7 +89,7 @@ export async function runClassicBlockerFix(code: BlockerCode, deps: ClassicBlock
         network,
       });
       const { hash } = await signSubmit(batch);
-      return formatBatchSuccess("SetOptions (merge-friendly)", batch, hash);
+      return { hash, message: formatBatchSuccess("SetOptions (merge-friendly)", batch, hash) };
     }
     case "CLAIMABLE_BALANCES_PENDING": {
       const ids = await fetchClaimableBalanceIdsFromApi(accountId, network);
@@ -97,7 +100,7 @@ export async function runClassicBlockerFix(code: BlockerCode, deps: ClassicBlock
         balanceIds: ids,
       });
       const { hash } = await signSubmit(batch);
-      return formatBatchSuccess("Claim claimable balance", batch, hash);
+      return { hash, message: formatBatchSuccess("Claim claimable balance", batch, hash) };
     }
     default:
       throw new Error(`No automated fix for blocker ${code}.`);
