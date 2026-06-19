@@ -6610,20 +6610,34 @@ body {
 
 .liveStatsCard {
   display: grid;
-  gap: 0.72rem;
-  padding: 0.82rem 0.88rem;
-  border-radius: 0.95rem;
-  border: 1px solid rgba(79, 140, 255, 0.2);
+  gap: 0.64rem;
+  padding: 0.78rem 0.82rem;
+  border-radius: 1.05rem;
+  border: 1px solid rgba(79, 140, 255, 0.16);
   background:
-    linear-gradient(180deg, rgba(11, 16, 24, 0.97), rgba(8, 12, 18, 0.96)),
+    linear-gradient(180deg, rgba(11, 16, 24, 0.96), rgba(8, 12, 18, 0.98)),
     rgba(9, 13, 19, 0.9);
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.04),
-    0 16px 40px rgba(0, 0, 0, 0.22);
+    inset 0 1px 0 rgba(255, 255, 255, 0.045),
+    0 14px 34px rgba(0, 0, 0, 0.2);
 }
 
 .liveStatsCard--compact {
   width: 100%;
+}
+
+.liveStatsCard--compact {
+  position: relative;
+}
+
+.liveStatsCard--compact::before {
+  content: "";
+  position: absolute;
+  inset: 0.4rem 0.55rem auto;
+  height: 1px;
+  background: linear-gradient(90deg, rgba(79, 140, 255, 0.65), rgba(34, 211, 238, 0.18), transparent);
+  opacity: 0.75;
+  pointer-events: none;
 }
 
 .liveStatsCard--stale {
@@ -6632,7 +6646,7 @@ body {
 
 .liveStatsCardHeader {
   display: grid;
-  gap: 0.55rem;
+  gap: 0.45rem;
 }
 
 .liveStatsCardStatus {
@@ -6670,7 +6684,7 @@ body {
 
 .liveStatsCardTitleBlock {
   display: grid;
-  gap: 0.2rem;
+  gap: 0.16rem;
 }
 
 .liveStatsCardEyebrow {
@@ -6683,45 +6697,47 @@ body {
 
 .liveStatsCardTitleBlock strong {
   color: #f4f7fb;
-  font-size: 0.95rem;
-  font-weight: 650;
-  letter-spacing: -0.02em;
+  font-size: 0.92rem;
+  font-weight: 660;
+  letter-spacing: -0.026em;
 }
 
 .liveStatsCardTitleBlock p {
   margin: 0;
   color: #8a97aa;
-  font-size: 0.72rem;
+  font-size: 0.7rem;
   line-height: 1.45;
 }
 
 .liveStatsCardRows {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 0.45rem;
+  gap: 0.38rem;
 }
 
 .liveStatsMetric {
   display: grid;
-  gap: 0.12rem;
-  padding: 0.58rem 0.64rem;
-  border-radius: 0.72rem;
-  border: 1px solid rgba(148, 163, 184, 0.1);
-  background: rgba(8, 12, 18, 0.82);
+  gap: 0.1rem;
+  padding: 0.52rem 0.58rem;
+  min-height: 3.35rem;
+  border-radius: 0.76rem;
+  border: 1px solid rgba(148, 163, 184, 0.09);
+  background: rgba(8, 12, 18, 0.78);
 }
 
 .liveStatsMetric span {
   color: #7f8a9d;
-  font-size: 0.66rem;
+  font-size: 0.61rem;
   letter-spacing: 0.06em;
   text-transform: uppercase;
 }
 
 .liveStatsMetric strong {
   color: #f4f7fb;
-  font-size: 1.06rem;
-  font-weight: 680;
-  letter-spacing: -0.03em;
+  font-size: 0.99rem;
+  font-weight: 690;
+  letter-spacing: -0.035em;
+  line-height: 1.08;
 }
 
 .liveStatsMetric--accent strong {
@@ -6734,7 +6750,9 @@ body {
   justify-content: space-between;
   gap: 0.75rem;
   color: #6f7d91;
-  font-size: 0.66rem;
+  padding-top: 0.05rem;
+  border-top: 1px solid rgba(148, 163, 184, 0.08);
+  font-size: 0.64rem;
   line-height: 1.3;
 }
 
@@ -10280,20 +10298,21 @@ button.btn.primary.cleanupHeaderCta:hover:not(:disabled) {
   }
 
   .liveStatsCard {
-    padding: 0.74rem 0.76rem;
-    gap: 0.62rem;
+    padding: 0.7rem 0.74rem;
+    gap: 0.58rem;
   }
 
   .liveStatsCardTitleBlock strong {
-    font-size: 0.88rem;
+    font-size: 0.86rem;
   }
 
   .liveStatsMetric {
-    padding: 0.52rem 0.56rem;
+    padding: 0.48rem 0.52rem;
+    min-height: 3.05rem;
   }
 
   .liveStatsMetric strong {
-    font-size: 0.98rem;
+    font-size: 0.94rem;
   }
 
   .scanInfoCard {

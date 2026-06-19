@@ -974,9 +974,19 @@ function LiveStatsPanel({
   compact?: boolean;
 }) {
   const isEmpty = stats.snapshot.testnetClosedCount === 0 && stats.snapshot.mainnetClosedCount === 0 && stats.snapshot.recoveredXlmTotal === 0;
-  const title = stats.loading && !stats.lastFetchedAt ? "Loading live stats" : stats.stale ? "Live stats stale" : isEmpty ? "Waiting for activity" : "Live stats";
+  const title = compact
+    ? "Live totals"
+    : stats.loading && !stats.lastFetchedAt
+      ? "Loading live stats"
+      : stats.stale
+        ? "Live stats stale"
+        : isEmpty
+          ? "Waiting for activity"
+          : "Live stats";
   const subtitle = stats.loading && !stats.lastFetchedAt
-    ? "Syncing the first snapshot."
+    ? compact
+      ? "Syncing snapshot."
+      : "Syncing the first snapshot."
     : stats.stale
       ? stats.error
         ? `Showing last known snapshot · ${stats.error}`
@@ -993,7 +1003,7 @@ function LiveStatsPanel({
           <strong>{liveStateLabel}</strong>
         </div>
         <div className="liveStatsCardTitleBlock">
-          <span className="liveStatsCardEyebrow">Live stats</span>
+          {!compact ? <span className="liveStatsCardEyebrow">Live stats</span> : null}
           <strong>{title}</strong>
           <p>{subtitle}</p>
         </div>
@@ -1014,7 +1024,7 @@ function LiveStatsPanel({
       </div>
       <div className="liveStatsCardFooter">
         <span>{stats.snapshot.updatedAt ? formatLiveStatsRecency(stats.snapshot.updatedAt) : "Updated after the next successful action"}</span>
-        <span>{stats.lastFetchedAt ? `Synced ${Math.max(1, Math.round((Date.now() - stats.lastFetchedAt) / 60_000))}m ago` : "4h refresh cadence"}</span>
+        <span>{stats.lastFetchedAt ? "4h refresh cadence" : "Awaiting first refresh"}</span>
       </div>
     </aside>
   );
