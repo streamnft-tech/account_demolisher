@@ -969,41 +969,78 @@ function useLiveStats(): LiveStatsController {
 function LiveStatsPanel({
   stats,
   compact = false,
+  className = "",
 }: {
   stats: LiveStatsState;
   compact?: boolean;
+  className?: string;
 }) {
-  const isEmpty = stats.snapshot.testnetClosedCount === 0 && stats.snapshot.mainnetClosedCount === 0 && stats.snapshot.recoveredXlmTotal === 0;
-  const title = compact
-    ? "Live totals"
-    : stats.loading && !stats.lastFetchedAt
+  const isEmpty =
+    stats.snapshot.testnetClosedCount === 0 &&
+    stats.snapshot.mainnetClosedCount === 0 &&
+    stats.snapshot.recoveredXlmTotal === 0;
+  const title =
+    stats.loading && !stats.lastFetchedAt
       ? "Loading live stats"
       : stats.stale
         ? "Live stats stale"
         : isEmpty
           ? "Waiting for activity"
           : "Live stats";
-  const subtitle = stats.loading && !stats.lastFetchedAt
-    ? compact
-      ? "Syncing snapshot."
-      : "Syncing the first snapshot."
-    : stats.stale
-      ? stats.error
-        ? `Showing last known snapshot · ${stats.error}`
-        : "Showing last known snapshot."
-      : isEmpty
-        ? "No confirmed events yet."
-        : formatLiveStatsRecency(stats.snapshot.updatedAt);
+  const subtitle =
+    stats.loading && !stats.lastFetchedAt
+      ? "Syncing the first snapshot."
+      : stats.stale
+        ? stats.error
+          ? `Showing last known snapshot · ${stats.error}`
+          : "Showing last known snapshot."
+        : isEmpty
+          ? "No confirmed events yet."
+          : formatLiveStatsRecency(stats.snapshot.updatedAt);
   const liveStateLabel = stats.stale ? "Stale" : stats.loading && !stats.lastFetchedAt ? "Syncing" : "Live";
+
+  if (compact) {
+    return (
+      <aside
+        className={`liveStatsCard liveStatsCard--compact${stats.stale ? " liveStatsCard--stale" : ""}${className ? ` ${className}` : ""}`}
+        aria-label="Live stats"
+      >
+        <div className="liveStatsCompactHeader">
+          <div className={`liveStatsCardStatus liveStatsCardStatus--${stats.stale ? "stale" : stats.loading && !stats.lastFetchedAt ? "loading" : "live"}`}>
+            <span aria-hidden="true" />
+            <strong>Live stats</strong>
+          </div>
+        </div>
+        <div className="liveStatsCardRows">
+          <div className="liveStatsMetric">
+            <span>Testnet closed</span>
+            <strong>{stats.snapshot.testnetClosedCount}</strong>
+          </div>
+          <div className="liveStatsMetric">
+            <span>Mainnet closed</span>
+            <strong>{stats.snapshot.mainnetClosedCount}</strong>
+          </div>
+          <div className="liveStatsMetric liveStatsMetric--accent">
+            <span>Recovered XLM</span>
+            <strong>{formatLiveStatsValue(stats.snapshot.recoveredXlmTotal)}</strong>
+          </div>
+        </div>
+      </aside>
+    );
+  }
+
   return (
-    <aside className={`liveStatsCard${compact ? " liveStatsCard--compact" : ""}${stats.stale ? " liveStatsCard--stale" : ""}`} aria-label="Live stats">
+    <aside
+      className={`liveStatsCard${stats.stale ? " liveStatsCard--stale" : ""}${className ? ` ${className}` : ""}`}
+      aria-label="Live stats"
+    >
       <div className="liveStatsCardHeader">
         <div className={`liveStatsCardStatus liveStatsCardStatus--${stats.stale ? "stale" : stats.loading && !stats.lastFetchedAt ? "loading" : "live"}`}>
           <span aria-hidden="true" />
           <strong>{liveStateLabel}</strong>
         </div>
         <div className="liveStatsCardTitleBlock">
-          {!compact ? <span className="liveStatsCardEyebrow">Live stats</span> : null}
+          <span className="liveStatsCardEyebrow">Live stats</span>
           <strong>{title}</strong>
           <p>{subtitle}</p>
         </div>
@@ -1019,7 +1056,7 @@ function LiveStatsPanel({
         </div>
         <div className="liveStatsMetric liveStatsMetric--accent">
           <span>Value recovered</span>
-          <strong>{formatLiveStatsValue(stats.snapshot.recoveredXlmTotal)} XLM</strong>
+          <strong>{formatLiveStatsValue(stats.snapshot.recoveredXlmTotal)}</strong>
         </div>
       </div>
       <div className="liveStatsCardFooter">
@@ -2049,15 +2086,7 @@ function AppShell({ liveStats }: { liveStats: LiveStatsController }) {
                 <span>{network === "mainnet" ? "Mainnet" : "Testnet"}</span>
               </div>
             ) : null}
-            <div className="sidebarWalletCard">
-              <strong>{walletAddress ? formatAccount(walletAddress) : "Wallet not connected"}</strong>
-              <span>{walletAddress ? "Connected for write actions" : "Connect only when you need to sign"}</span>
-              {!walletAddress ? (
-                <button type="button" className="sidebarConnectButton" onClick={connectWallet} disabled={walletBusy}>
-                  Connect wallet
-                </button>
-              ) : null}
-            </div>
+            <LiveStatsPanel stats={liveStats} compact className="liveStatsCard--sidebar" />
           </div>
         </aside>
 
@@ -2136,51 +2165,51 @@ function AppShell({ liveStats }: { liveStats: LiveStatsController }) {
 
           {activeSection === "scan" ? (
             <section className="appSection appSection--scan">
-              <div className="scanCenter">
-                <div className="scanHero">
-                  <h1>Check account health.</h1>
-                  <p>Scan a Stellar address to see what needs attention before you clean up or merge the account.</p>
-                </div>
-
-                <LiveStatsPanel stats={liveStats} compact />
-
-                <section className="scanWorkspace">
-                  <div className="card consolePrimaryCard scanFormCard scanFormCard--hero">
-                    <h2 className="cardTitle">Scan a Stellar address</h2>
-                    <div className="scanInputRow">
-                      <div className="overviewControlBlock scanInputControl">
-                        <input
-                          id="source"
-                          className="input"
-                          placeholder="G..."
-                          value={source}
-                          onChange={(e) => {
-                            setSource(e.target.value);
-                            setHealth(null);
-                            setActionSuccess(null);
-                          }}
-                          spellCheck={false}
-                          autoCapitalize="none"
-                        />
-                      </div>
-                      <button type="button" className="btn primary scanSubmit" disabled={loading} onClick={runHealthCheck}>
-                        {loading ? "Scanning…" : "Scan"}
-                      </button>
-                    </div>
-                    <div className="scanHelperCard">
-                      <span className="scanHelperIcon" aria-hidden="true" />
-                      <p>No signing is required to scan. Use your wallet only when you approve a cleanup or merge action.</p>
-                    </div>
-                    {walletError ? <p className="error">{walletError}</p> : null}
-                    {error ? <p className="error">{error}</p> : null}
-                    {walletMismatch ? (
-                      <p className="error">
-                        Connected wallet <code className="inlineCode">{walletAddress?.slice(0, 8)}…</code> does not match the
-                        selected account.
-                      </p>
-                    ) : null}
+              <div className="scanStage">
+                <div className="scanStageMain">
+                  <div className="scanHero">
+                    <h1>Check account health.</h1>
+                    <p>Scan a Stellar address to see what needs attention before you clean up or merge the account.</p>
                   </div>
-                </section>
+
+                  <section className="scanWorkspace">
+                    <div className="card consolePrimaryCard scanFormCard scanFormCard--hero">
+                      <h2 className="cardTitle">Scan a Stellar address</h2>
+                      <div className="scanInputRow">
+                        <div className="overviewControlBlock scanInputControl">
+                          <input
+                            id="source"
+                            className="input"
+                            placeholder="G..."
+                            value={source}
+                            onChange={(e) => {
+                              setSource(e.target.value);
+                              setHealth(null);
+                              setActionSuccess(null);
+                            }}
+                            spellCheck={false}
+                            autoCapitalize="none"
+                          />
+                        </div>
+                        <button type="button" className="btn primary scanSubmit" disabled={loading} onClick={runHealthCheck}>
+                          {loading ? "Scanning…" : "Scan"}
+                        </button>
+                      </div>
+                      <div className="scanHelperCard">
+                        <span className="scanHelperIcon" aria-hidden="true" />
+                        <p>No signing is required to scan. Use your wallet only when you approve a cleanup or merge action.</p>
+                      </div>
+                      {walletError ? <p className="error">{walletError}</p> : null}
+                      {error ? <p className="error">{error}</p> : null}
+                      {walletMismatch ? (
+                        <p className="error">
+                          Connected wallet <code className="inlineCode">{walletAddress?.slice(0, 8)}…</code> does not match the
+                          selected account.
+                        </p>
+                      ) : null}
+                    </div>
+                  </section>
+                </div>
 
                 <section className="scanSavedSection" aria-label="Saved accounts">
                   <div className="scanSavedSectionLabel">Saved accounts</div>
@@ -2206,6 +2235,10 @@ function AppShell({ liveStats }: { liveStats: LiveStatsController }) {
                     ))}
                   </div>
                 </section>
+
+                <div className="scanStageStats">
+                  <LiveStatsPanel stats={liveStats} compact className="liveStatsCard--sidebar liveStatsCard--scanFallback" />
+                </div>
               </div>
             </section>
           ) : null}

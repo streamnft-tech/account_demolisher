@@ -1,5 +1,6 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 
 export type LiveStatsNetwork = "testnet" | "mainnet";
 export type LiveStatsEventKind = "cleanup" | "close";
@@ -31,7 +32,18 @@ const DEFAULT_STORE: LiveStatsStore = {
   processedEventIds: [],
 };
 
-const statsFilePath = process.env.ORBITWAY_LIVE_STATS_FILE?.trim() || join(process.cwd(), "data", "live-stats.json");
+const moduleDir = dirname(fileURLToPath(import.meta.url));
+const defaultStatsFilePath = join(moduleDir, "..", "data", "live-stats.json");
+const statsFilePath = process.env.ORBITWAY_LIVE_STATS_FILE?.trim() || defaultStatsFilePath;
+const legacyStatsFilePaths = Array.from(
+  new Set(
+    [
+      join(process.cwd(), "data", "live-stats.json"),
+      join(moduleDir, "..", "..", "..", "data", "live-stats.json"),
+      join(process.cwd(), "services", "api", "data", "live-stats.json"),
+    ].filter((candidate) => candidate !== statsFilePath),
+  ),
+);
 
 let cachedStore: LiveStatsStore | null = null;
 
@@ -62,16 +74,42 @@ function normalizeAmount(value: unknown): number {
   return Math.round(amount * 1_000_000) / 1_000_000;
 }
 
+async function readStoreFromPath(path: string): Promise<LiveStatsStore> {
+  const raw = await readFile(path, "utf8");
+  const parsed = JSON.parse(raw) as Partial<LiveStatsStore>;
+  return sanitizeStore(parsed);
+}
+
+async function readLegacyStore(): Promise<LiveStatsStore | null> {
+  for (const candidate of legacyStatsFilePaths) {
+    try {
+      return await readStoreFromPath(candidate);
+    } catch (error) {
+      const code = typeof error === "object" && error && "code" in error ? String((error as NodeJS.ErrnoException).code ?? "") : "";
+      if (code === "ENOENT") continue;
+    }
+  }
+  return null;
+}
+
 async function readStore(): Promise<LiveStatsStore> {
   if (cachedStore) return cloneStore(cachedStore);
 
   try {
-    const raw = await readFile(statsFilePath, "utf8");
-    const parsed = JSON.parse(raw) as Partial<LiveStatsStore>;
-    cachedStore = sanitizeStore(parsed);
+    cachedStore = await readStoreFromPath(statsFilePath);
   } catch (error) {
     const code = typeof error === "object" && error && "code" in error ? String((error as NodeJS.ErrnoException).code ?? "") : "";
-    cachedStore = code === "ENOENT" ? cloneStore(DEFAULT_STORE) : cloneStore(DEFAULT_STORE);
+    if (code === "ENOENT") {
+      const legacyStore = await readLegacyStore();
+      if (legacyStore) {
+        cachedStore = legacyStore;
+        await writeStore(legacyStore);
+      } else {
+        cachedStore = cloneStore(DEFAULT_STORE);
+      }
+    } else {
+      cachedStore = cloneStore(DEFAULT_STORE);
+    }
   }
 
   return cloneStore(cachedStore);
