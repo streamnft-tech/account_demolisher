@@ -41,6 +41,12 @@ type WatchlistEntry = {
 
 const BASE_RESERVE_XLM = 0.5;
 
+function leadingCount(detail: string | undefined): number {
+  if (!detail) return 0;
+  const match = detail.match(/^(\d+)/);
+  return match ? Number.parseInt(match[1] ?? "0", 10) : 0;
+}
+
 const HEALTH_FETCH_TIMEOUT_MS = 90_000;
 const WATCHLIST_STORAGE_KEY = "stellar-sweep-watchlist";
 
@@ -1093,6 +1099,11 @@ function AppShell({ liveStats }: { liveStats: LiveStatsController }) {
   const [cleanupFocusStep, setCleanupFocusStep] = useState<CleanupStepId | null>(null);
   const [cleanupReviewStep, setCleanupReviewStep] = useState<CleanupStepId | null>(null);
   const [cleanupTrustlinePlannerOpen, setCleanupTrustlinePlannerOpen] = useState(false);
+  const [mergeSuccessModal, setMergeSuccessModal] = useState<{
+    hash: string;
+    destination: string;
+    estimatedPayout: string;
+  } | null>(null);
   const cleanupStepRefs = useRef<Partial<Record<CleanupStepId, HTMLElement | null>>>({});
 
   useEffect(() => {
@@ -1291,7 +1302,22 @@ function AppShell({ liveStats }: { liveStats: LiveStatsController }) {
   const runAccountMerge = useCallback(async () => {
     const id = source.trim();
     const dest = destination.trim();
-    if (!health?.horizonUrl || !walletAddress || !isValidClassicAddress(id) || !isValidClassicAddress(dest)) return;
+    if (!health?.horizonUrl) {
+      setWalletError("Run a fresh health scan before submitting ACCOUNT_MERGE.");
+      return;
+    }
+    if (!walletAddress) {
+      setWalletError("Connect the source account wallet before submitting the final merge.");
+      return;
+    }
+    if (!isValidClassicAddress(id)) {
+      setWalletError("Source account is invalid. Scan a valid Stellar address first.");
+      return;
+    }
+    if (!isValidClassicAddress(dest)) {
+      setWalletError("Enter a valid destination Stellar address before merging.");
+      return;
+    }
     if (!health.canDemolish) {
       setWalletError("Health scan must report merge-ready state before submitting ACCOUNT_MERGE.");
       return;
@@ -1314,6 +1340,12 @@ function AppShell({ liveStats }: { liveStats: LiveStatsController }) {
       setActionSuccess(
         `Account merge submitted. Tx ${hash.slice(0, 10)}… Native XLM (minus fee) credits the destination; this account should disappear once Horizon confirms.`,
       );
+      setMergeSuccessModal({
+        hash,
+        destination: dest,
+        estimatedPayout:
+          typeof health?.nativeBalanceXlm === "number" ? `${health.nativeBalanceXlm.toFixed(2)} XLM` : "Pending Horizon confirmation",
+      });
       await liveStats.recordEvent({
         id: hash,
         kind: "close",
@@ -1329,6 +1361,10 @@ function AppShell({ liveStats }: { liveStats: LiveStatsController }) {
   }, [health, liveStats, network, source, destination, walletAddress, refreshHealth, signSubmitClassicBatch]);
 
   const destOk = isValidClassicAddress(destination.trim());
+  const sourceEqualsDestination =
+    isValidClassicAddress(source.trim()) &&
+    isValidClassicAddress(destination.trim()) &&
+    source.trim() === destination.trim();
   const blocking = health?.blockers.filter((b: Blocker) => b.kind === "blocking") ?? [];
   const accountKnown =
     health &&
@@ -1431,19 +1467,26 @@ function AppShell({ liveStats }: { liveStats: LiveStatsController }) {
         : blocking.length > 0
           ? "Not ready for merge"
           : "Review first";
-  const compactTrustlineCount = trustlineSummary?.total ?? (trustlineChecklistRow?.status === "pass" ? 0 : 1);
+  const openOffersChecklistRow = checklist.find((row) => row.id === "classic_open_offers");
+  const dataEntriesChecklistRow = checklist.find((row) => row.id === "classic_data_entries");
+  const compactTrustlineCount =
+    trustlineSummary?.total ?? (trustlineChecklistRow?.status === "fail" ? 1 : 0);
   const sourceLabel = sourceTrim ? formatAccount(sourceTrim) : "GTEST1MN...2345TTTT";
   const networkLabel = network === "mainnet" ? "Mainnet" : "Testnet";
-  const openOffersCount = health?.openPositions?.sdexOffers?.length ?? 4;
-  const trustlineCount = trustlineSummary?.total ?? (health?.checklist.find((row) => row.id === "classic_trustlines")?.status === "pass" ? 0 : 3);
-  const dataEntryCount = health?.checklist.find((row) => row.id === "classic_data_entries")?.status === "pass" ? 0 : 2;
+  const openOffersCount =
+    health?.openPositions?.sdexOffers?.length ??
+    (openOffersChecklistRow?.status === "fail" ? Math.max(1, leadingCount(openOffersChecklistRow.detail)) : 0);
+  const trustlineCount =
+    trustlineSummary?.total ?? (trustlineChecklistRow?.status === "fail" ? Math.max(1, compactTrustlineCount) : 0);
+  const dataEntryCount =
+    dataEntriesChecklistRow?.status === "fail" ? Math.max(1, leadingCount(dataEntriesChecklistRow.detail)) : 0;
   const signerCount = health?.classicAccount?.signers?.extra?.length ?? 0;
   const thresholdState = health?.classicAccount?.thresholds.mergeFriendly ? "Merge-friendly" : "Needs review";
   const allowanceCount = health?.openPositions?.defiProtocols?.length ?? 1;
   const sponsorshipCount = health?.classicAccount?.sponsorships.sponsoringCount ?? 0;
   const sponsorshipEntryCount = health?.classicAccount?.sponsorships.entries?.length ?? 0;
   const hasExtraSigners = signerCount > 0;
-  const thresholdsNeedCleanup = !health?.classicAccount?.thresholds.mergeFriendly;
+  const thresholdsNeedCleanup = health?.classicAccount?.thresholds ? !health.classicAccount.thresholds.mergeFriendly : false;
   const controlNeedsCleanup = hasExtraSigners || thresholdsNeedCleanup;
   const defiReviewCount = health?.openPositions?.defiProtocols?.length ?? 0;
   const trustlineCleanupTarget: CleanupStepId = trustlineSummary?.funded ? "route-asset-balances" : "remove-trustlines";
@@ -1455,9 +1498,9 @@ function AppShell({ liveStats }: { liveStats: LiveStatsController }) {
   const recoverableValueCards = [
       {
         title: "Native XLM balance",
-        detail: `${typeof health?.nativeBalanceXlm === "number" ? health.nativeBalanceXlm.toFixed(2) : "15.42"} XLM available`,
+        detail: `${typeof health?.nativeBalanceXlm === "number" ? health.nativeBalanceXlm.toFixed(2) : "0.00"} XLM available`,
         body: "Spendable balance routed during merge.",
-        metaLeft: `+${typeof health?.nativeBalanceXlm === "number" ? health.nativeBalanceXlm.toFixed(2) : "15.42"} XLM after merge`,
+        metaLeft: `+${typeof health?.nativeBalanceXlm === "number" ? health.nativeBalanceXlm.toFixed(2) : "0.00"} XLM after merge`,
         metaRight: "Not a blocker",
         badge: "Supported",
         tone: "value" as const,
@@ -1587,7 +1630,7 @@ function AppShell({ liveStats }: { liveStats: LiveStatsController }) {
       },
       {
         title: "Trustlines",
-        detail: `${trustlineCount} trustline${trustlineCount === 1 ? "" : "s"} - USDC, AQUA, yXLM`,
+        detail: `${trustlineCount} trustline${trustlineCount === 1 ? "" : "s"}${trustlineCount > 0 && trustlineHasBalances ? " with balances" : ""}`,
         body:
           trustlineCount > 0
             ? trustlineSummary?.funded
@@ -1622,7 +1665,7 @@ function AppShell({ liveStats }: { liveStats: LiveStatsController }) {
       },
       {
         title: "Data entries",
-        detail: `${dataEntryCount} entries: app_name, session_key`,
+        detail: `${dataEntryCount} entr${dataEntryCount === 1 ? "y" : "ies"}`,
         body: dataEntryCount > 0 ? "Data entries lock reserve until cleared." : "Not a blocker for this account.",
         metaLeft: `+${(dataEntryCount * 0.5).toFixed(2)} XLM unlockable`,
         metaRight: dataEntryCount > 0 ? "Signing: Required" : "Not a blocker",
@@ -1760,7 +1803,7 @@ function AppShell({ liveStats }: { liveStats: LiveStatsController }) {
       id: "cancel-open-offers" as CleanupStepId,
       num: "1",
       title: "Cancel open offers",
-      detail: `${openOffersCount} open offers active`,
+        detail: `${openOffersCount} open offer${openOffersCount === 1 ? "" : "s"} active`,
       why: "Offers must be cancelled before related trustlines can be removed.",
       result: "Offer reserves released. Trustline cleanup unlocked.",
       benefit: `+${(openOffersCount * 0.5).toFixed(2)} XLM unlockable`,
@@ -1774,7 +1817,7 @@ function AppShell({ liveStats }: { liveStats: LiveStatsController }) {
       id: "route-asset-balances" as CleanupStepId,
       num: "2",
       title: "Route asset balances",
-      detail: `${trustlineCount} trustlines with non-zero balance: USDC (45.00), AQUA (120.00)`,
+      detail: `${trustlineCount} trustline${trustlineCount === 1 ? "" : "s"} with non-zero balance`,
       why: "Asset balances must be routed before trustlines can be removed.",
       result: "Balances routed. Trustline cleanup unlocked.",
       benefit: `+${(trustlineCount * 0.6).toFixed(2)} XLM routable`,
@@ -1803,7 +1846,7 @@ function AppShell({ liveStats }: { liveStats: LiveStatsController }) {
       id: "remove-trustlines" as CleanupStepId,
       num: "4",
       title: "Remove trustlines",
-      detail: `${trustlineCount} trustlines - 1 zero-balance, 2 pending balance route`,
+      detail: `${trustlineCount} trustline${trustlineCount === 1 ? "" : "s"} pending cleanup`,
       why: "Trustline reserve cannot be released until balances move out.",
       result: "Trustlines removed. Reserve recovered.",
       benefit: `+${(trustlineCount * 0.5).toFixed(2)} XLM unlockable`,
@@ -1818,7 +1861,7 @@ function AppShell({ liveStats }: { liveStats: LiveStatsController }) {
       id: "clear-data-entries" as CleanupStepId,
       num: "5",
       title: "Clear data entries",
-      detail: `${dataEntryCount} data entries: app_name, session_key`,
+      detail: `${dataEntryCount} data entr${dataEntryCount === 1 ? "y" : "ies"}`,
       why: "Data entries lock reserve and must be cleared before merge.",
       result: "Data entry reserves released.",
       benefit: `+${(dataEntryCount * 0.5).toFixed(2)} XLM unlockable`,
@@ -1901,14 +1944,30 @@ function AppShell({ liveStats }: { liveStats: LiveStatsController }) {
     dataEntryCount === 0 &&
     !controlNeedsCleanup;
   const mergeCanProceed = Boolean(
-    health?.canDemolish && destOk && mergeDestinationAcknowledged && mergeAcknowledgedIrreversible && mergeChecklistReady,
+    health?.canDemolish &&
+      destOk &&
+      !sourceEqualsDestination &&
+      mergeDestinationAcknowledged &&
+      mergeAcknowledgedIrreversible &&
+      mergeChecklistReady,
   );
+  const mergeCalloutTone = sourceEqualsDestination ? "fail" : destOk ? "ok" : "warn";
+  const mergeCalloutBody = sourceEqualsDestination
+    ? "Destination must be different from the source account. ACCOUNT_MERGE cannot send funds back into the same address."
+    : destOk
+      ? mergeDestinationMode === "exchange"
+        ? "Exchange flow selected. Confirm this exchange accepts direct Stellar deposits for account-merge payouts before you submit."
+        : mergeDestinationMode === "unsure"
+          ? "Destination format is valid, but support is still unconfirmed. Verify the receiving destination before final wallet approval."
+          : "Destination format is valid. Confirm this wallet can safely receive the merged XLM payout on the selected network."
+      : "Enter a valid Stellar destination address before final merge review.";
   const mergeSummaryRows = [
     ["Source account", sourceLabel],
     ["Destination", mergeDestinationMode === "exchange" ? "Exchange" : mergeDestinationMode === "unsure" ? "Not sure" : "Wallet"],
     ["Recoverable reserve", reserveReleaseLabel],
-    ["Estimated payout", typeof health?.nativeBalanceXlm === "number" ? `${health.nativeBalanceXlm.toFixed(2)} XLM` : "23.72 XLM"],
+    ["Estimated payout", typeof health?.nativeBalanceXlm === "number" ? `${health.nativeBalanceXlm.toFixed(2)} XLM` : "0.00 XLM"],
   ] as const;
+  const appFeedbackError = walletError ?? error;
   const scanSavedAccounts =
     watchlist.length > 0
       ? watchlist.slice(0, 3).map((entry, index) => ({
@@ -2154,12 +2213,43 @@ function AppShell({ liveStats }: { liveStats: LiveStatsController }) {
             ))}
           </nav>
 
-          {actionSuccess ? (
-            <div className="appSuccessNotice" role="status" aria-live="polite">
-              <span className="appSuccessNoticeIcon" aria-hidden="true">
-                ✓
-              </span>
-              <span>{actionSuccess}</span>
+          {appFeedbackError || actionSuccess ? (
+            <div className="appNoticeStack" aria-live="polite" aria-atomic="true">
+              {appFeedbackError ? (
+                <div className="appErrorNotice" role="alert">
+                  <span className="appErrorNoticeIcon" aria-hidden="true">
+                    !
+                  </span>
+                  <span>{appFeedbackError}</span>
+                  <button
+                    type="button"
+                    className="appNoticeDismiss"
+                    aria-label="Dismiss error"
+                    onClick={() => {
+                      if (walletError) setWalletError(null);
+                      if (error) setError(null);
+                    }}
+                  >
+                    ×
+                  </button>
+                </div>
+              ) : null}
+              {actionSuccess ? (
+                <div className="appSuccessNotice" role="status">
+                  <span className="appSuccessNoticeIcon" aria-hidden="true">
+                    ✓
+                  </span>
+                  <span>{actionSuccess}</span>
+                  <button
+                    type="button"
+                    className="appNoticeDismiss"
+                    aria-label="Dismiss success message"
+                    onClick={() => setActionSuccess(null)}
+                  >
+                    ×
+                  </button>
+                </div>
+              ) : null}
             </div>
           ) : null}
 
@@ -2623,10 +2713,11 @@ function AppShell({ liveStats }: { liveStats: LiveStatsController }) {
                     autoCapitalize="none"
                   />
 
-                  <div className={`mergeCallout mergeCallout--${mergeDestinationMode}`}>
+                  <div className={`mergeCallout mergeCallout--${mergeCalloutTone}`}>
                     <span className="mergeCalloutIcon" aria-hidden="true">
                       i
                     </span>
+                    <p>{mergeCalloutBody}</p>
                   </div>
                   <p className="mergeHelper">
                     Ensure this destination supports direct <code>ACCOUNT_MERGE</code>, or select the exchange flow above to use a mediator account.
@@ -2645,12 +2736,81 @@ function AppShell({ liveStats }: { liveStats: LiveStatsController }) {
                   </div>
 
                   <button type="button" className="btn primary mergeReviewButton" disabled={!mergeCanProceed || !health?.horizonUrl || mergeBusy} onClick={() => void runAccountMerge()}>
-                    Review final merge
+                    {mergeBusy ? "Opening wallet…" : "Review final merge"}
                   </button>
+                  {walletError ? <p className="error mergeInlineError">{walletError}</p> : null}
+                  {actionSuccess ? <p className="mergeInlineSuccess">{actionSuccess}</p> : null}
                   <p className="mergeFooterHint">Complete cleanup, set a valid destination, and acknowledge the irreversible step before merging.</p>
                 </div>
               </div>
             </section>
+          ) : null}
+          {mergeSuccessModal ? (
+            <div className="modalOverlay" role="presentation" onClick={() => setMergeSuccessModal(null)}>
+              <section
+                className="cleanupReviewModal mergeSuccessModal"
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="merge-success-modal-title"
+                onClick={(event) => event.stopPropagation()}
+              >
+                <div className="cleanupReviewModalHeader">
+                  <div>
+                    <span className="modalKicker">Merge submitted</span>
+                    <h2 id="merge-success-modal-title">Final merge is on its way.</h2>
+                  </div>
+                  <button type="button" className="modalCloseButton" aria-label="Close success message" onClick={() => setMergeSuccessModal(null)}>
+                    ×
+                  </button>
+                </div>
+
+                <div className="mergeSuccessHero">
+                  <span className="mergeSuccessIcon" aria-hidden="true">
+                    ✓
+                  </span>
+                  <p>
+                    Orbitway submitted the final account merge successfully. Horizon should now confirm the payout and remove the
+                    source account from the ledger.
+                  </p>
+                </div>
+
+                <div className="cleanupReviewModalGrid">
+                  <div className="cleanupReviewModalRow">
+                    <span>Transaction</span>
+                    <strong>{mergeSuccessModal.hash}</strong>
+                  </div>
+                  <div className="cleanupReviewModalRow">
+                    <span>Destination</span>
+                    <strong>{mergeSuccessModal.destination}</strong>
+                  </div>
+                  <div className="cleanupReviewModalRow">
+                    <span>Estimated payout</span>
+                    <strong>{mergeSuccessModal.estimatedPayout}</strong>
+                  </div>
+                </div>
+
+                <div className="cleanupReviewModalNote">
+                  You can return to Scan or stay here while the network confirms. The next refresh should reflect the closed
+                  account state.
+                </div>
+
+                <div className="cleanupReviewModalActions">
+                  <button type="button" className="btn ghost" onClick={() => setMergeSuccessModal(null)}>
+                    Stay here
+                  </button>
+                  <button
+                    type="button"
+                    className="btn primary"
+                    onClick={() => {
+                      setMergeSuccessModal(null);
+                      setActiveSection("scan");
+                    }}
+                  >
+                    Back to Scan
+                  </button>
+                </div>
+              </section>
+            </div>
           ) : null}
         </section>
       </main>

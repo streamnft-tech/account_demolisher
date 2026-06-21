@@ -9101,20 +9101,43 @@ button.btn.primary.cleanupHeaderCta:hover:not(:disabled) {
   font-weight: 700;
 }
 
+.appNoticeStack {
+  position: fixed;
+  top: 1.25rem;
+  right: 1.25rem;
+  z-index: 85;
+  display: grid;
+  gap: 0.7rem;
+  width: min(26rem, calc(100vw - 2rem));
+  pointer-events: none;
+}
+
+.appErrorNotice,
 .appSuccessNotice {
   display: inline-flex;
   align-items: center;
   gap: 0.65rem;
-  align-self: flex-start;
-  padding: 0.54rem 0.7rem;
+  padding: 0.7rem 0.8rem;
   border-radius: 8px;
-  border: 1px solid rgba(34, 197, 94, 0.2);
-  background: rgba(6, 28, 22, 0.78);
-  color: #b7f3cf;
-  font-size: 0.75rem;
-  line-height: 1.35;
+  font-size: 0.78rem;
+  line-height: 1.45;
+  box-shadow: 0 18px 44px rgba(0, 0, 0, 0.24);
+  pointer-events: auto;
 }
 
+.appSuccessNotice {
+  border: 1px solid rgba(34, 197, 94, 0.2);
+  background: rgba(6, 28, 22, 0.92);
+  color: #b7f3cf;
+}
+
+.appErrorNotice {
+  border: 1px solid rgba(251, 113, 133, 0.2);
+  background: rgba(44, 14, 22, 0.94);
+  color: #fecdd3;
+}
+
+.appErrorNoticeIcon,
 .appSuccessNoticeIcon {
   display: inline-flex;
   align-items: center;
@@ -9125,6 +9148,62 @@ button.btn.primary.cleanupHeaderCta:hover:not(:disabled) {
   background: rgba(34, 197, 94, 0.18);
   color: #8ee6c8;
   font-size: 0.67rem;
+  font-weight: 700;
+}
+
+.appErrorNoticeIcon {
+  background: rgba(251, 113, 133, 0.16);
+  color: #fda4af;
+}
+
+.appNoticeDismiss {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.55rem;
+  height: 1.55rem;
+  border: 0;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.04);
+  color: currentColor;
+  cursor: pointer;
+  font-size: 1rem;
+  line-height: 1;
+}
+
+.mergeSuccessModal {
+  width: min(100%, 32rem);
+}
+
+.mergeSuccessHero {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0.8rem;
+  align-items: start;
+  padding: 0.85rem 0.9rem;
+  border-radius: 0.8rem;
+  border: 1px solid rgba(45, 212, 191, 0.16);
+  background: rgba(8, 23, 19, 0.8);
+}
+
+.mergeSuccessHero p {
+  margin: 0;
+  color: #cbd5e1;
+  font-size: 0.84rem;
+  line-height: 1.5;
+}
+
+.mergeSuccessIcon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.7rem;
+  height: 1.7rem;
+  border-radius: 999px;
+  background: rgba(34, 197, 94, 0.16);
+  color: #86efac;
+  font-size: 0.9rem;
   font-weight: 700;
 }
 
@@ -9655,11 +9734,40 @@ button.btn.primary.cleanupHeaderCta:hover:not(:disabled) {
 .mergeCallout {
   min-height: 4.9rem;
   display: grid;
+  grid-template-columns: auto 1fr;
   align-items: start;
+  gap: 0.68rem;
   padding: 0.65rem 0.74rem;
   border-radius: 8px;
   border: 1px solid rgba(245, 158, 11, 0.2);
   background: rgba(36, 29, 11, 0.72);
+}
+
+.mergeCallout p {
+  margin: 0;
+  color: #d7ddee;
+  font-size: 0.82rem;
+  line-height: 1.45;
+}
+
+.mergeCallout--ok {
+  border-color: rgba(52, 211, 153, 0.24);
+  background: rgba(11, 36, 27, 0.72);
+}
+
+.mergeCallout--ok .mergeCalloutIcon {
+  border-color: rgba(52, 211, 153, 0.45);
+  color: #34d399;
+}
+
+.mergeCallout--fail {
+  border-color: rgba(251, 113, 133, 0.24);
+  background: rgba(47, 18, 27, 0.78);
+}
+
+.mergeCallout--fail .mergeCalloutIcon {
+  border-color: rgba(251, 113, 133, 0.45);
+  color: #fb7185;
 }
 
 .mergeCalloutIcon {
@@ -9731,6 +9839,17 @@ button.btn.primary.cleanupHeaderCta:hover:not(:disabled) {
 .mergeReviewButton {
   width: 100%;
   min-height: 3rem;
+}
+
+.mergeInlineError,
+.mergeInlineSuccess {
+  margin: 0;
+  font-size: 0.86rem;
+  line-height: 1.5;
+}
+
+.mergeInlineSuccess {
+  color: #6ee7b7;
 }
 
 .mergeFooterHint {
